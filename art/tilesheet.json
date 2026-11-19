@@ -1,0 +1,1108 @@
+{
+ "tile": 64,
+ "cols": 8,
+ "rows": 25,
+ "width": 512,
+ "height": 1600,
+ "cells": [
+  {
+   "row": 0,
+   "col": 0,
+   "group": "Deep sea  [d]",
+   "note": "variants vary by tile position",
+   "name": ""
+  },
+  {
+   "row": 0,
+   "col": 1,
+   "group": "Deep sea  [d]",
+   "note": "variants vary by tile position",
+   "name": ""
+  },
+  {
+   "row": 0,
+   "col": 2,
+   "group": "Deep sea  [d]",
+   "note": "variants vary by tile position",
+   "name": ""
+  },
+  {
+   "row": 0,
+   "col": 3,
+   "group": "Deep sea  [d]",
+   "note": "variants vary by tile position",
+   "name": ""
+  },
+  {
+   "row": 0,
+   "col": 4,
+   "group": "Deep sea  [d]",
+   "note": "variants vary by tile position",
+   "name": ""
+  },
+  {
+   "row": 0,
+   "col": 5,
+   "group": "Deep sea  [d]",
+   "note": "variants vary by tile position",
+   "name": ""
+  },
+  {
+   "row": 1,
+   "col": 0,
+   "group": "Shallow sea  [a]",
+   "note": "variants vary by tile position",
+   "name": ""
+  },
+  {
+   "row": 1,
+   "col": 1,
+   "group": "Shallow sea  [a]",
+   "note": "variants vary by tile position",
+   "name": ""
+  },
+  {
+   "row": 1,
+   "col": 2,
+   "group": "Shallow sea  [a]",
+   "note": "variants vary by tile position",
+   "name": ""
+  },
+  {
+   "row": 1,
+   "col": 3,
+   "group": "Shallow sea  [a]",
+   "note": "variants vary by tile position",
+   "name": ""
+  },
+  {
+   "row": 1,
+   "col": 4,
+   "group": "Shallow sea  [a]",
+   "note": "variants vary by tile position",
+   "name": ""
+  },
+  {
+   "row": 1,
+   "col": 5,
+   "group": "Shallow sea  [a]",
+   "note": "variants vary by tile position",
+   "name": ""
+  },
+  {
+   "row": 2,
+   "col": 0,
+   "group": "Beach  [b]",
+   "note": "variants vary by tile position",
+   "name": ""
+  },
+  {
+   "row": 2,
+   "col": 1,
+   "group": "Beach  [b]",
+   "note": "variants vary by tile position",
+   "name": ""
+  },
+  {
+   "row": 2,
+   "col": 2,
+   "group": "Beach  [b]",
+   "note": "variants vary by tile position",
+   "name": ""
+  },
+  {
+   "row": 2,
+   "col": 3,
+   "group": "Beach  [b]",
+   "note": "variants vary by tile position",
+   "name": ""
+  },
+  {
+   "row": 2,
+   "col": 4,
+   "group": "Beach  [b]",
+   "note": "variants vary by tile position",
+   "name": ""
+  },
+  {
+   "row": 2,
+   "col": 5,
+   "group": "Beach  [b]",
+   "note": "variants vary by tile position",
+   "name": ""
+  },
+  {
+   "row": 3,
+   "col": 0,
+   "group": "Grassland  [g]",
+   "note": "variants vary by tile position",
+   "name": ""
+  },
+  {
+   "row": 3,
+   "col": 1,
+   "group": "Grassland  [g]",
+   "note": "variants vary by tile position",
+   "name": ""
+  },
+  {
+   "row": 3,
+   "col": 2,
+   "group": "Grassland  [g]",
+   "note": "variants vary by tile position",
+   "name": ""
+  },
+  {
+   "row": 3,
+   "col": 3,
+   "group": "Grassland  [g]",
+   "note": "variants vary by tile position",
+   "name": ""
+  },
+  {
+   "row": 3,
+   "col": 4,
+   "group": "Grassland  [g]",
+   "note": "variants vary by tile position",
+   "name": ""
+  },
+  {
+   "row": 3,
+   "col": 5,
+   "group": "Grassland  [g]",
+   "note": "variants vary by tile position",
+   "name": ""
+  },
+  {
+   "row": 4,
+   "col": 0,
+   "group": "Farmland  [f]",
+   "note": "variants vary by tile position",
+   "name": ""
+  },
+  {
+   "row": 4,
+   "col": 1,
+   "group": "Farmland  [f]",
+   "note": "variants vary by tile position",
+   "name": ""
+  },
+  {
+   "row": 4,
+   "col": 2,
+   "group": "Farmland  [f]",
+   "note": "variants vary by tile position",
+   "name": ""
+  },
+  {
+   "row": 4,
+   "col": 3,
+   "group": "Farmland  [f]",
+   "note": "variants vary by tile position",
+   "name": ""
+  },
+  {
+   "row": 4,
+   "col": 4,
+   "group": "Farmland  [f]",
+   "note": "variants vary by tile position",
+   "name": ""
+  },
+  {
+   "row": 4,
+   "col": 5,
+   "group": "Farmland  [f]",
+   "note": "variants vary by tile position",
+   "name": ""
+  },
+  {
+   "row": 5,
+   "col": 0,
+   "group": "Forest  [t]",
+   "note": "variants vary by tile position",
+   "name": ""
+  },
+  {
+   "row": 5,
+   "col": 1,
+   "group": "Forest  [t]",
+   "note": "variants vary by tile position",
+   "name": ""
+  },
+  {
+   "row": 5,
+   "col": 2,
+   "group": "Forest  [t]",
+   "note": "variants vary by tile position",
+   "name": ""
+  },
+  {
+   "row": 5,
+   "col": 3,
+   "group": "Forest  [t]",
+   "note": "variants vary by tile position",
+   "name": ""
+  },
+  {
+   "row": 5,
+   "col": 4,
+   "group": "Forest  [t]",
+   "note": "variants vary by tile position",
+   "name": ""
+  },
+  {
+   "row": 5,
+   "col": 5,
+   "group": "Forest  [t]",
+   "note": "variants vary by tile position",
+   "name": ""
+  },
+  {
+   "row": 6,
+   "col": 0,
+   "group": "Hills  [h]",
+   "note": "scenery, not buildable",
+   "name": ""
+  },
+  {
+   "row": 6,
+   "col": 1,
+   "group": "Hills  [h]",
+   "note": "scenery, not buildable",
+   "name": ""
+  },
+  {
+   "row": 6,
+   "col": 2,
+   "group": "Hills  [h]",
+   "note": "scenery, not buildable",
+   "name": ""
+  },
+  {
+   "row": 6,
+   "col": 3,
+   "group": "Hills  [h]",
+   "note": "scenery, not buildable",
+   "name": ""
+  },
+  {
+   "row": 6,
+   "col": 4,
+   "group": "Hills  [h]",
+   "note": "scenery, not buildable",
+   "name": ""
+  },
+  {
+   "row": 6,
+   "col": 5,
+   "group": "Hills  [h]",
+   "note": "scenery, not buildable",
+   "name": ""
+  },
+  {
+   "row": 7,
+   "col": 0,
+   "group": "Mountain  [m]",
+   "note": "scenery, not buildable",
+   "name": ""
+  },
+  {
+   "row": 7,
+   "col": 1,
+   "group": "Mountain  [m]",
+   "note": "scenery, not buildable",
+   "name": ""
+  },
+  {
+   "row": 7,
+   "col": 2,
+   "group": "Mountain  [m]",
+   "note": "scenery, not buildable",
+   "name": ""
+  },
+  {
+   "row": 7,
+   "col": 3,
+   "group": "Mountain  [m]",
+   "note": "scenery, not buildable",
+   "name": ""
+  },
+  {
+   "row": 7,
+   "col": 4,
+   "group": "Mountain  [m]",
+   "note": "scenery, not buildable",
+   "name": ""
+  },
+  {
+   "row": 7,
+   "col": 5,
+   "group": "Mountain  [m]",
+   "note": "scenery, not buildable",
+   "name": ""
+  },
+  {
+   "row": 8,
+   "col": 0,
+   "group": "Snow peaks  [n]",
+   "note": "scenery, not buildable",
+   "name": ""
+  },
+  {
+   "row": 8,
+   "col": 1,
+   "group": "Snow peaks  [n]",
+   "note": "scenery, not buildable",
+   "name": ""
+  },
+  {
+   "row": 8,
+   "col": 2,
+   "group": "Snow peaks  [n]",
+   "note": "scenery, not buildable",
+   "name": ""
+  },
+  {
+   "row": 8,
+   "col": 3,
+   "group": "Snow peaks  [n]",
+   "note": "scenery, not buildable",
+   "name": ""
+  },
+  {
+   "row": 8,
+   "col": 4,
+   "group": "Snow peaks  [n]",
+   "note": "scenery, not buildable",
+   "name": ""
+  },
+  {
+   "row": 8,
+   "col": 5,
+   "group": "Snow peaks  [n]",
+   "note": "scenery, not buildable",
+   "name": ""
+  },
+  {
+   "row": 9,
+   "col": 0,
+   "group": "Oil field  [o]",
+   "note": "resource: oil well",
+   "name": ""
+  },
+  {
+   "row": 9,
+   "col": 1,
+   "group": "Oil field  [o]",
+   "note": "resource: oil well",
+   "name": ""
+  },
+  {
+   "row": 9,
+   "col": 2,
+   "group": "Oil field  [o]",
+   "note": "resource: oil well",
+   "name": ""
+  },
+  {
+   "row": 9,
+   "col": 3,
+   "group": "Oil field  [o]",
+   "note": "resource: oil well",
+   "name": ""
+  },
+  {
+   "row": 9,
+   "col": 4,
+   "group": "Oil field  [o]",
+   "note": "resource: oil well",
+   "name": ""
+  },
+  {
+   "row": 9,
+   "col": 5,
+   "group": "Oil field  [o]",
+   "note": "resource: oil well",
+   "name": ""
+  },
+  {
+   "row": 10,
+   "col": 0,
+   "group": "Ore deposit  [e]",
+   "note": "resource: iron mine",
+   "name": ""
+  },
+  {
+   "row": 10,
+   "col": 1,
+   "group": "Ore deposit  [e]",
+   "note": "resource: iron mine",
+   "name": ""
+  },
+  {
+   "row": 10,
+   "col": 2,
+   "group": "Ore deposit  [e]",
+   "note": "resource: iron mine",
+   "name": ""
+  },
+  {
+   "row": 10,
+   "col": 3,
+   "group": "Ore deposit  [e]",
+   "note": "resource: iron mine",
+   "name": ""
+  },
+  {
+   "row": 10,
+   "col": 4,
+   "group": "Ore deposit  [e]",
+   "note": "resource: iron mine",
+   "name": ""
+  },
+  {
+   "row": 10,
+   "col": 5,
+   "group": "Ore deposit  [e]",
+   "note": "resource: iron mine",
+   "name": ""
+  },
+  {
+   "row": 11,
+   "col": 0,
+   "group": "Downtown  [u]",
+   "note": "city core",
+   "name": ""
+  },
+  {
+   "row": 11,
+   "col": 1,
+   "group": "Downtown  [u]",
+   "note": "city core",
+   "name": ""
+  },
+  {
+   "row": 11,
+   "col": 2,
+   "group": "Downtown  [u]",
+   "note": "city core",
+   "name": ""
+  },
+  {
+   "row": 11,
+   "col": 3,
+   "group": "Downtown  [u]",
+   "note": "city core",
+   "name": ""
+  },
+  {
+   "row": 11,
+   "col": 4,
+   "group": "Downtown  [u]",
+   "note": "city core",
+   "name": ""
+  },
+  {
+   "row": 11,
+   "col": 5,
+   "group": "Downtown  [u]",
+   "note": "city core",
+   "name": ""
+  },
+  {
+   "row": 12,
+   "col": 0,
+   "group": "Suburb  [s]",
+   "note": "city outskirts",
+   "name": ""
+  },
+  {
+   "row": 12,
+   "col": 1,
+   "group": "Suburb  [s]",
+   "note": "city outskirts",
+   "name": ""
+  },
+  {
+   "row": 12,
+   "col": 2,
+   "group": "Suburb  [s]",
+   "note": "city outskirts",
+   "name": ""
+  },
+  {
+   "row": 12,
+   "col": 3,
+   "group": "Suburb  [s]",
+   "note": "city outskirts",
+   "name": ""
+  },
+  {
+   "row": 12,
+   "col": 4,
+   "group": "Suburb  [s]",
+   "note": "city outskirts",
+   "name": ""
+  },
+  {
+   "row": 12,
+   "col": 5,
+   "group": "Suburb  [s]",
+   "note": "city outskirts",
+   "name": ""
+  },
+  {
+   "row": 13,
+   "col": 0,
+   "group": "Port / harbour  [p]",
+   "note": "pier + boat",
+   "name": ""
+  },
+  {
+   "row": 13,
+   "col": 1,
+   "group": "Port / harbour  [p]",
+   "note": "pier + boat",
+   "name": ""
+  },
+  {
+   "row": 13,
+   "col": 2,
+   "group": "Port / harbour  [p]",
+   "note": "pier + boat",
+   "name": ""
+  },
+  {
+   "row": 13,
+   "col": 3,
+   "group": "Port / harbour  [p]",
+   "note": "pier + boat",
+   "name": ""
+  },
+  {
+   "row": 13,
+   "col": 4,
+   "group": "Port / harbour  [p]",
+   "note": "pier + boat",
+   "name": ""
+  },
+  {
+   "row": 13,
+   "col": 5,
+   "group": "Port / harbour  [p]",
+   "note": "pier + boat",
+   "name": ""
+  },
+  {
+   "row": 14,
+   "col": 0,
+   "group": "Roads [r]",
+   "note": "connect to road, city and port tiles",
+   "name": ""
+  },
+  {
+   "row": 14,
+   "col": 1,
+   "group": "Roads [r]",
+   "note": "connect to road, city and port tiles",
+   "name": ""
+  },
+  {
+   "row": 14,
+   "col": 2,
+   "group": "Roads [r]",
+   "note": "connect to road, city and port tiles",
+   "name": ""
+  },
+  {
+   "row": 14,
+   "col": 3,
+   "group": "Roads [r]",
+   "note": "connect to road, city and port tiles",
+   "name": ""
+  },
+  {
+   "row": 14,
+   "col": 4,
+   "group": "Roads [r]",
+   "note": "connect to road, city and port tiles",
+   "name": ""
+  },
+  {
+   "row": 14,
+   "col": 5,
+   "group": "Roads [r]",
+   "note": "connect to road, city and port tiles",
+   "name": ""
+  },
+  {
+   "row": 14,
+   "col": 6,
+   "group": "Roads [r]",
+   "note": "connect to road, city and port tiles",
+   "name": ""
+  },
+  {
+   "row": 14,
+   "col": 7,
+   "group": "Roads [r]",
+   "note": "connect to road, city and port tiles",
+   "name": ""
+  },
+  {
+   "row": 15,
+   "col": 0,
+   "group": "Roads [r]",
+   "note": "connect to road, city and port tiles",
+   "name": ""
+  },
+  {
+   "row": 15,
+   "col": 1,
+   "group": "Roads [r]",
+   "note": "connect to road, city and port tiles",
+   "name": ""
+  },
+  {
+   "row": 15,
+   "col": 2,
+   "group": "Roads [r]",
+   "note": "connect to road, city and port tiles",
+   "name": ""
+  },
+  {
+   "row": 15,
+   "col": 3,
+   "group": "Roads [r]",
+   "note": "connect to road, city and port tiles",
+   "name": ""
+  },
+  {
+   "row": 15,
+   "col": 4,
+   "group": "Roads [r]",
+   "note": "connect to road, city and port tiles",
+   "name": ""
+  },
+  {
+   "row": 15,
+   "col": 5,
+   "group": "Roads [r]",
+   "note": "connect to road, city and port tiles",
+   "name": ""
+  },
+  {
+   "row": 15,
+   "col": 6,
+   "group": "Roads [r]",
+   "note": "connect to road, city and port tiles",
+   "name": ""
+  },
+  {
+   "row": 15,
+   "col": 7,
+   "group": "Roads [r]",
+   "note": "connect to road, city and port tiles",
+   "name": ""
+  },
+  {
+   "row": 16,
+   "col": 0,
+   "group": "Railways (overlay)",
+   "note": "drawn over any terrain; connect to neighbouring rail tiles",
+   "name": "isolated"
+  },
+  {
+   "row": 16,
+   "col": 1,
+   "group": "Railways (overlay)",
+   "note": "drawn over any terrain; connect to neighbouring rail tiles",
+   "name": "horizontal"
+  },
+  {
+   "row": 16,
+   "col": 2,
+   "group": "Railways (overlay)",
+   "note": "drawn over any terrain; connect to neighbouring rail tiles",
+   "name": "vertical"
+  },
+  {
+   "row": 16,
+   "col": 3,
+   "group": "Railways (overlay)",
+   "note": "drawn over any terrain; connect to neighbouring rail tiles",
+   "name": "corner N-E"
+  },
+  {
+   "row": 16,
+   "col": 4,
+   "group": "Railways (overlay)",
+   "note": "drawn over any terrain; connect to neighbouring rail tiles",
+   "name": "corner E-S"
+  },
+  {
+   "row": 16,
+   "col": 5,
+   "group": "Railways (overlay)",
+   "note": "drawn over any terrain; connect to neighbouring rail tiles",
+   "name": "corner S-W"
+  },
+  {
+   "row": 16,
+   "col": 6,
+   "group": "Railways (overlay)",
+   "note": "drawn over any terrain; connect to neighbouring rail tiles",
+   "name": "corner N-W"
+  },
+  {
+   "row": 16,
+   "col": 7,
+   "group": "Railways (overlay)",
+   "note": "drawn over any terrain; connect to neighbouring rail tiles",
+   "name": "T east"
+  },
+  {
+   "row": 17,
+   "col": 0,
+   "group": "Railways (overlay)",
+   "note": "drawn over any terrain; connect to neighbouring rail tiles",
+   "name": "T south"
+  },
+  {
+   "row": 17,
+   "col": 1,
+   "group": "Railways (overlay)",
+   "note": "drawn over any terrain; connect to neighbouring rail tiles",
+   "name": "T west"
+  },
+  {
+   "row": 17,
+   "col": 2,
+   "group": "Railways (overlay)",
+   "note": "drawn over any terrain; connect to neighbouring rail tiles",
+   "name": "T north"
+  },
+  {
+   "row": 17,
+   "col": 3,
+   "group": "Railways (overlay)",
+   "note": "drawn over any terrain; connect to neighbouring rail tiles",
+   "name": "crossing"
+  },
+  {
+   "row": 17,
+   "col": 4,
+   "group": "Railways (overlay)",
+   "note": "drawn over any terrain; connect to neighbouring rail tiles",
+   "name": "dead end N"
+  },
+  {
+   "row": 17,
+   "col": 5,
+   "group": "Railways (overlay)",
+   "note": "drawn over any terrain; connect to neighbouring rail tiles",
+   "name": "dead end E"
+  },
+  {
+   "row": 17,
+   "col": 6,
+   "group": "Railways (overlay)",
+   "note": "drawn over any terrain; connect to neighbouring rail tiles",
+   "name": "dead end S"
+  },
+  {
+   "row": 17,
+   "col": 7,
+   "group": "Railways (overlay)",
+   "note": "drawn over any terrain; connect to neighbouring rail tiles",
+   "name": "dead end W"
+  },
+  {
+   "row": 18,
+   "col": 0,
+   "group": "Oil icon",
+   "note": "sizes 12 / 20 / 32 / 48 px (minimap, zoomed out, zoomed in)",
+   "name": ""
+  },
+  {
+   "row": 18,
+   "col": 1,
+   "group": "Oil icon",
+   "note": "sizes 12 / 20 / 32 / 48 px (minimap, zoomed out, zoomed in)",
+   "name": ""
+  },
+  {
+   "row": 18,
+   "col": 2,
+   "group": "Oil icon",
+   "note": "sizes 12 / 20 / 32 / 48 px (minimap, zoomed out, zoomed in)",
+   "name": ""
+  },
+  {
+   "row": 18,
+   "col": 3,
+   "group": "Oil icon",
+   "note": "sizes 12 / 20 / 32 / 48 px (minimap, zoomed out, zoomed in)",
+   "name": ""
+  },
+  {
+   "row": 19,
+   "col": 0,
+   "group": "Ore icon",
+   "note": "same sizes",
+   "name": ""
+  },
+  {
+   "row": 19,
+   "col": 1,
+   "group": "Ore icon",
+   "note": "same sizes",
+   "name": ""
+  },
+  {
+   "row": 19,
+   "col": 2,
+   "group": "Ore icon",
+   "note": "same sizes",
+   "name": ""
+  },
+  {
+   "row": 19,
+   "col": 3,
+   "group": "Ore icon",
+   "note": "same sizes",
+   "name": ""
+  },
+  {
+   "row": 20,
+   "col": 0,
+   "group": "Building markers",
+   "note": "type colour + letter, outline = company colour",
+   "name": ""
+  },
+  {
+   "row": 20,
+   "col": 1,
+   "group": "Building markers",
+   "note": "type colour + letter, outline = company colour",
+   "name": ""
+  },
+  {
+   "row": 20,
+   "col": 2,
+   "group": "Building markers",
+   "note": "type colour + letter, outline = company colour",
+   "name": ""
+  },
+  {
+   "row": 20,
+   "col": 3,
+   "group": "Building markers",
+   "note": "type colour + letter, outline = company colour",
+   "name": ""
+  },
+  {
+   "row": 20,
+   "col": 4,
+   "group": "Building markers",
+   "note": "type colour + letter, outline = company colour",
+   "name": ""
+  },
+  {
+   "row": 20,
+   "col": 5,
+   "group": "Building markers",
+   "note": "type colour + letter, outline = company colour",
+   "name": ""
+  },
+  {
+   "row": 20,
+   "col": 6,
+   "group": "Building markers",
+   "note": "type colour + letter, outline = company colour",
+   "name": ""
+  },
+  {
+   "row": 21,
+   "col": 0,
+   "group": "Lot ownership",
+   "note": "owned lot outline, selected / hover frame",
+   "name": ""
+  },
+  {
+   "row": 21,
+   "col": 1,
+   "group": "Lot ownership",
+   "note": "owned lot outline, selected / hover frame",
+   "name": ""
+  },
+  {
+   "row": 21,
+   "col": 2,
+   "group": "Lot ownership",
+   "note": "owned lot outline, selected / hover frame",
+   "name": ""
+  },
+  {
+   "row": 22,
+   "col": 0,
+   "group": "Layout modules",
+   "note": "factory facility designer cells",
+   "name": ""
+  },
+  {
+   "row": 22,
+   "col": 1,
+   "group": "Layout modules",
+   "note": "factory facility designer cells",
+   "name": ""
+  },
+  {
+   "row": 22,
+   "col": 2,
+   "group": "Layout modules",
+   "note": "factory facility designer cells",
+   "name": ""
+  },
+  {
+   "row": 22,
+   "col": 3,
+   "group": "Layout modules",
+   "note": "factory facility designer cells",
+   "name": ""
+  },
+  {
+   "row": 22,
+   "col": 4,
+   "group": "Layout modules",
+   "note": "factory facility designer cells",
+   "name": ""
+  },
+  {
+   "row": 22,
+   "col": 5,
+   "group": "Layout modules",
+   "note": "factory facility designer cells",
+   "name": ""
+  },
+  {
+   "row": 22,
+   "col": 6,
+   "group": "Layout modules",
+   "note": "factory facility designer cells",
+   "name": ""
+  },
+  {
+   "row": 23,
+   "col": 0,
+   "group": "Minimap pixel colours",
+   "note": "1 px per tile in the world image",
+   "name": "d"
+  },
+  {
+   "row": 23,
+   "col": 1,
+   "group": "Minimap pixel colours",
+   "note": "1 px per tile in the world image",
+   "name": "a"
+  },
+  {
+   "row": 23,
+   "col": 2,
+   "group": "Minimap pixel colours",
+   "note": "1 px per tile in the world image",
+   "name": "b"
+  },
+  {
+   "row": 23,
+   "col": 3,
+   "group": "Minimap pixel colours",
+   "note": "1 px per tile in the world image",
+   "name": "g"
+  },
+  {
+   "row": 23,
+   "col": 4,
+   "group": "Minimap pixel colours",
+   "note": "1 px per tile in the world image",
+   "name": "f"
+  },
+  {
+   "row": 23,
+   "col": 5,
+   "group": "Minimap pixel colours",
+   "note": "1 px per tile in the world image",
+   "name": "t"
+  },
+  {
+   "row": 23,
+   "col": 6,
+   "group": "Minimap pixel colours",
+   "note": "1 px per tile in the world image",
+   "name": "h"
+  },
+  {
+   "row": 23,
+   "col": 7,
+   "group": "Minimap pixel colours",
+   "note": "1 px per tile in the world image",
+   "name": "m"
+  },
+  {
+   "row": 24,
+   "col": 0,
+   "group": "Minimap pixel colours",
+   "note": "1 px per tile in the world image",
+   "name": "e"
+  },
+  {
+   "row": 24,
+   "col": 1,
+   "group": "Minimap pixel colours",
+   "note": "1 px per tile in the world image",
+   "name": "n"
+  },
+  {
+   "row": 24,
+   "col": 2,
+   "group": "Minimap pixel colours",
+   "note": "1 px per tile in the world image",
+   "name": "o"
+  },
+  {
+   "row": 24,
+   "col": 3,
+   "group": "Minimap pixel colours",
+   "note": "1 px per tile in the world image",
+   "name": "r"
+  },
+  {
+   "row": 24,
+   "col": 4,
+   "group": "Minimap pixel colours",
+   "note": "1 px per tile in the world image",
+   "name": "u"
+  },
+  {
+   "row": 24,
+   "col": 5,
+   "group": "Minimap pixel colours",
+   "note": "1 px per tile in the world image",
+   "name": "s"
+  },
+  {
+   "row": 24,
+   "col": 6,
+   "group": "Minimap pixel colours",
+   "note": "1 px per tile in the world image",
+   "name": "p"
+  },
+  {
+   "row": 24,
+   "col": 7,
+   "group": "Minimap pixel colours",
+   "note": "1 px per tile in the world image",
+   "name": "rail"
+  }
+ ]
+}

@@ -1,0 +1,25 @@
+{
+  "name": "capital-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Turn-based multiplayer browser economy game inspired by Capitalism (1995)",
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,green \"tsx watch server/index.ts\" \"vite\"",
+    "build": "vite build",
+    "start": "tsx server/index.ts",
+    "typecheck": "tsc --noEmit",
+    "sim": "tsx tools/sim.ts"
+  },
+  "dependencies": {
+    "express": "^5.3.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.6",
+    "concurrently": "^10.0.7",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8"
+  }
+}
