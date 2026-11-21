@@ -1,6 +1,6 @@
 // Stock market: every company is listed. Buy and sell shares of the others; issue or buy back your own.
 import { SHARE_SPREAD, SHARE_IMPACT, MIN_OWN } from '../../shared/engine.js';
-import { h, money, money2, num } from './util.js';
+import { h, money, money2, num, crisp } from './util.js';
 import { S, act, companyOf } from './state.js';
 
 let sel = ''; let qty = 1000;
@@ -32,7 +32,7 @@ export function stocksScreen(): HTMLElement {
 function detail(t: NonNullable<ReturnType<typeof companyOf>> & any): HTMLElement {
   const v = S.view!; const me = v.me; const c = v.companies.find(x => x.id === t.id)!; const isMe = c.id === me.id;
   const have = isMe ? 0 : me.portfolio?.[c.id] ?? 0;
-  const cv = h('canvas', { width: 520, height: 180, style: 'width:100%;background:#fff;border:1px solid #bbb' });
+  const cv = crisp(h('canvas', { style: 'background:#fff;border:1px solid #bbb' }), 520, 180);
   setTimeout(() => lineChart(cv, c.priceHist), 0);
   const treas = c.shares - c.float - c.held;
   const impact = SHARE_IMPACT * qty / c.shares, buyPx = c.price * (1 + impact), sellPx = Math.max(0.01, c.price * (1 - impact));
@@ -52,10 +52,10 @@ function detail(t: NonNullable<ReturnType<typeof companyOf>> & any): HTMLElement
 }
 
 function lineChart(cv: HTMLCanvasElement, data: number[]) {
-  const g = cv.getContext('2d')!; g.clearRect(0, 0, cv.width, cv.height);
+  const g = cv.getContext('2d')!; g.clearRect(0, 0, 520, 180);
   if (data.length < 2) { g.fillStyle = '#777'; g.font = '13px system-ui'; g.fillText('Price history appears after a few turns.', 16, 24); return; }
-  const lo = Math.min(...data) * 0.97, hi = Math.max(...data) * 1.03; const X = (i: number) => 40 + i / (data.length - 1) * (cv.width - 50), Y = (x: number) => cv.height - 18 - (x - lo) / Math.max(1e-9, hi - lo) * (cv.height - 30);
+  const lo = Math.min(...data) * 0.97, hi = Math.max(...data) * 1.03; const X = (i: number) => 40 + i / (data.length - 1) * (520 - 50), Y = (x: number) => 180 - 18 - (x - lo) / Math.max(1e-9, hi - lo) * (cv.height - 30);
   g.strokeStyle = '#ddd'; g.fillStyle = '#666'; g.font = '10px system-ui'; g.textAlign = 'right';
-  for (let i = 0; i <= 3; i++) { const val = lo + (hi - lo) * i / 3; g.beginPath(); g.moveTo(40, Y(val)); g.lineTo(cv.width - 10, Y(val)); g.stroke(); g.fillText(val.toFixed(2), 36, Y(val) + 3); }
+  for (let i = 0; i <= 3; i++) { const val = lo + (hi - lo) * i / 3; g.beginPath(); g.moveTo(40, Y(val)); g.lineTo(520 - 10, Y(val)); g.stroke(); g.fillText(val.toFixed(2), 36, Y(val) + 3); }
   g.strokeStyle = '#1f4e8c'; g.lineWidth = 2; g.beginPath(); data.forEach((p, i) => i ? g.lineTo(X(i), Y(p)) : g.moveTo(X(i), Y(p))); g.stroke();
 }

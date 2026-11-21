@@ -2,6 +2,7 @@
 import { OVERSTAFF_CAP, OVERSTAFF_BONUS, BUILDINGS, PRODUCTS, PRODUCT_LIST, MAX_LINES, MAX_AUTO, MAX_STORE_SIZE, MODULES, FAC_GRID, MALL_UNITS, MALL_MIN_BRAND, MALL_LEASE, type ProductId, type ModuleType } from '../../shared/data.js';
 import { requiredWorkers, capacity, slotCapacity, moduleStats, layoutIssues, isLinked, linkKey, cellNeed, adj8, linkable, staffFactor, staffCap, whCap, exportCap, cellCandidates, worldPrice, worldVolume, isUnlocked, canResearch, researchOf, UNLOCK_RATE } from '../../shared/engine.js';
 import type { Building } from '../../shared/types.js';
+import { areaInfo, AREA_R, haulCost, haulPath, cityTile, HAUL_RAIL, HAUL_ROAD, HAUL_OFF } from '../../shared/engine.js';
 import { h, money, money2, num, cls, asset } from './util.js';
 import { S, act, companyOf } from './state.js';
 import { rentControls } from './realestate.js';
@@ -15,21 +16,24 @@ const numInput = (value: number, onchange: (v: number) => void, attrs: Record<st
 /** Explicit supply source: a harbour (import) or a factory (own, or one that sells to everyone). Nothing is bought without one. */
 function sourceSelect(b: Building, product: ProductId, current: string, onchange: (v: string) => void) {
   const v = S.view!; const pd = PRODUCTS[product];
-  const transport = (fromCity: number) => pd.basePrice * 0.0002 * (v.dist[fromCity]?.[b.city] ?? 15);
+  const ctx = { cities: v.cities, world: S.world! };
+  const transport = (fromTile: number) => haulCost(ctx, product, fromTile, b.idx);
+  const path = (fromTile: number) => ' (path ' + num(haulPath(ctx, fromTile, b.idx)) + ')';
+  const tileOf = (id: string) => [...v.buildings, ...v.others].find(o => o.id === id.split('#')[0])?.idx ?? b.idx;
   const sel = h('select', { style: 'max-width:270px', class: current ? '' : 'nosrc' }, h('option', { value: '' }, '⚠ select a source'));
   const harbours = v.cities.flatMap(c => (c.port ? (c.harbour ?? []).filter(g => g.product === product && g.qty > 0.5).map(g => ({ c, g })) : [])).map(({ c, g }) => {
-    const price = v.market[product].importPrice * g.mult, tr = transport(c.id);
-    return h('option', { value: 'harbour:' + c.id, selected: current === 'harbour:' + c.id }, '⚓ ' + c.name + ' harbour: ' + money2(price) + ' + transport ' + money2(tr) + ' = ' + money2(price + tr) + ' · q35 · ' + num(g.qty) + ' left');
+    const price = v.market[product].importPrice * g.mult, tr = transport(cityTile(ctx, c));
+    return h('option', { value: 'harbour:' + c.id, selected: current === 'harbour:' + c.id }, '⚓ ' + c.name + ' harbour: ' + money2(price) + ' + transport ' + money2(tr) + path(cityTile(ctx, c)) + ' = ' + money2(price + tr) + ' · q35 · ' + num(g.qty) + ' left');
   });
   if (harbours.length) sel.append(h('optgroup', { label: 'Harbours that stock it (imports)' }, harbours));
   const own = v.buildings.filter(o => o.product === product && o.id !== b.id && o.type !== 'store' && o.type !== 'rd')
-    .map(o => h('option', { value: o.id, selected: current === o.id }, o.name + ' (' + v.cities[o.city].name + '): internal + transport ' + money2(transport(o.city)) + ' · stock ' + num(o.stock.qty)));
+    .map(o => h('option', { value: o.id, selected: current === o.id }, o.name + ' (' + v.cities[o.city].name + '): internal + transport ' + money2(transport(o.idx)) + path(o.idx) + ' · stock ' + num(o.stock.qty)));
   if (own.length) sel.append(h('optgroup', { label: 'Your factories' }, own));
   const ownEx = v.buildings.flatMap(o => (o.layout ?? []).map((c, i) => ({ o, c, i })).filter(x => x.c.m === 'export' && x.c.product === product && x.o.id !== b.id))
-    .map(({ o, c, i }) => h('option', { value: o.id + '#' + i, selected: current === o.id + '#' + i }, o.name + ' export cell #' + (i + 1) + ' (' + v.cities[o.city].name + '): internal + transport ' + money2(transport(o.city)) + ' · stock ' + num(c.stock?.qty ?? 0)));
+    .map(({ o, c, i }) => h('option', { value: o.id + '#' + i, selected: current === o.id + '#' + i }, o.name + ' export cell #' + (i + 1) + ' (' + v.cities[o.city].name + '): internal + transport ' + money2(transport(o.idx)) + path(o.idx) + ' · stock ' + num(c.stock?.qty ?? 0)));
   if (ownEx.length) sel.append(h('optgroup', { label: 'Your export cells' }, ownEx));
   const others = v.listings.filter(l => l.product === product && l.company !== v.me.id)
-    .map(l => h('option', { value: l.building, selected: current === l.building }, (companyOf(l.company)?.name ?? '?') + ', ' + v.cities[l.city].name + ': ' + money2(l.price) + ' + ' + money2(transport(l.city)) + ' = ' + money2(l.price + transport(l.city)) + ' · q' + l.q + ' · ' + num(l.qty) + ' avail'));
+    .map(l => h('option', { value: l.building, selected: current === l.building }, (companyOf(l.company)?.name ?? '?') + ', ' + v.cities[l.city].name + ': ' + money2(l.price) + ' + ' + money2(transport(tileOf(l.building))) + path(tileOf(l.building)) + ' = ' + money2(l.price + transport(tileOf(l.building))) + ' · q' + l.q + ' · ' + num(l.qty) + ' avail'));
   if (others.length) sel.append(h('optgroup', { label: 'Factories & export cells selling to everyone' }, others));
   if (current && ![...sel.querySelectorAll('option')].some(o => o.value === current)) sel.append(h('option', { value: current, selected: true }, 'Chosen source (not selling right now)'));
   sel.addEventListener('change', () => onchange(sel.value));
@@ -50,6 +54,33 @@ const tabsFor = (b: Building): string[] =>
       : b.type === 'rd' ? ['Research', 'Staff', 'Report']
         : ['Production', 'Staff', 'Report'];
 
+/** Toggle that paints the haul-cost field of this facility on the map. */
+function costToggle(b: Building): HTMLElement | null {
+  if (b.type === 'mall') return null;
+  return h('div', null,
+    h('label', { class: 'costtoggle', title: 'Paint on the map what it costs to haul goods to this facility from every tile' },
+      h('input', { type: 'checkbox', checked: S.costField === b.id, onchange: (e: Event) => { S.costField = (e.target as HTMLInputElement).checked ? b.id : null; S.render(); } }),
+      ' Show transport cost field', h('span', { class: 'muted small' }, `  (path cost per tile: rail ${HAUL_RAIL}, road ${HAUL_ROAD}, nothing ${HAUL_OFF})`)),
+    h('label', { class: 'costtoggle', title: 'Draw the cheapest route from every chosen supplier to this facility' },
+      h('input', { type: 'checkbox', checked: S.showRoutes, onchange: (e: Event) => { S.showRoutes = (e.target as HTMLInputElement).checked; S.render(); } }),
+      ' Show transport routes from the chosen sources'));
+}
+/** What the 5x5 surroundings of a tile would do for a building of this type (also used to preview a build site). */
+export function areaLine(type: string, idx: number, prefix = true): HTMLElement | null {
+  const v = S.view!; if (!S.world || type === 'mall') return null;
+  const a = areaInfo({ cities: v.cities, world: S.world }, { type, idx }); const side = AREA_R * 2 + 1;
+  const what = a.kind === 'pop' ? num(a.pop) + ' inhabitants' : a.count + ' of ' + a.max + ' ' + ({ deposits: type === 'oil' ? 'oil field tiles' : 'ore deposit tiles', trees: 'forest tiles', farmland: 'farmland tiles' } as Record<string, string>)[a.kind];
+  const gain = Math.round((a.factor - 1) * 100); const target = ({ factory: 'production', store: 'customers', rd: 'research', farm: 'harvest', forest: 'timber output', mine: 'ore output', oil: 'oil output' } as Record<string, string>)[type] ?? 'output';
+  return h('div', { class: 'areachip' }, h('b', null, `Area ${side}×${side}: `), what + ' → ', h('b', { class: gain >= 0 ? 'good' : 'bad' }, (gain >= 0 ? '+' : '') + gain + '% ' + target),
+    prefix ? h('span', { class: 'muted small' }, a.kind === 'pop' ? '  (more people around = better)' : '  (more of them around = better)') : null);
+}
+const areaChip = (b: Building) => areaLine(b.type, b.idx);
+function constructionBanner(b: Building): HTMLElement | null {
+  const mall = b.mall ? S.view!.malls.find(m => m.id === b.mall) : null;
+  if (b.building) return h('div', { class: 'banner', style: 'background:#f5e6b8;color:#5a4300;padding:3px 8px' }, `🚧 Under construction: ${b.building} more month${b.building === 1 ? '' : 's'} before it starts operating.${b.type === 'mall' ? ' Tenants can already reserve units.' : ''}`);
+  if (mall && mall.opensIn) return h('div', { class: 'banner', style: 'background:#f5e6b8;color:#5a4300;padding:3px 8px' }, `🚧 ${mall.name} opens in ${mall.opensIn} month${mall.opensIn === 1 ? '' : 's'}: your shop starts trading then. You can already set up the shelf.`);
+  return null;
+}
 function mgrChip(b: Building): HTMLElement {
   const m = S.view!.me.staff?.find(p => p.assigned === b.id);
   const go = () => { S.tab = 'personnel'; S.render(); };
@@ -73,6 +104,9 @@ export function buildingPanel(b: Building): HTMLElement {
       h('button', { class: 'mini', title: 'Rename', onclick: () => { const n = prompt('Rename building', b.name); if (n) act({ type: 'rename', id: b.id, name: n }); } }, 'Rename'),
       h('button', { class: 'mini danger', title: 'Demolish', onclick: () => { if (confirm('Demolish ' + b.name + '? You recover ' + money(b.invested * 0.4) + '. The land stays yours.')) act({ type: 'sellBuilding', id: b.id }); } }, 'Demolish +' + money(b.invested * 0.4)),
       h('button', { class: 'mini', title: 'Close', onclick: () => { S.sel = null; S.buildingId = null; S.render(); } }, '✕')),
+    constructionBanner(b),
+    areaChip(b),
+    costToggle(b),
     mgrChip(b),
     h('div', { class: 'tabs' }, tabs.map(t => h('button', { class: 'tab' + (t === tab ? ' active' : ''), onclick: () => { S.cfgTab = t; S.render(); } }, t))),
     h('div', { class: 'tabbody' }, sections[tab]()));

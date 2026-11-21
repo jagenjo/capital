@@ -1,6 +1,7 @@
+import { tr } from './i18n.js';
 import { PRODUCT_LIST, PRODUCTS, BUILDINGS, LENDERS, type Lender, type ProductId } from '../../shared/data.js';
 import { requiredWorkers, layoutIssues, harbourStocks, worldPrice, worldVolume, WORLD_DROP, loanOffer, loanDue, collateralValue, pledgedTo, MAX_LOANS } from '../../shared/engine.js';
-import { h, money, money2, num, asset, cls } from './util.js';
+import { h, money, money2, num, asset, cls, crisp } from './util.js';
 import { S, act, companyOf } from './state.js';
 import { focusTile } from './worldmap.js';
 
@@ -15,7 +16,8 @@ export function buildingsScreen(): HTMLElement {
       h('tbody', null, rows.map(b => {
         const res = b.report.revenue - b.report.purchases - b.report.wages - b.report.maint;
         const need = requiredWorkers(b); const issues: string[] = [];
-        if (b.type !== 'rd' && b.workers < need) issues.push('understaffed');
+        const opens = b.building ?? (b.mall ? v.malls.find(m => m.id === b.mall)?.opensIn : 0) ?? 0; if (opens) issues.push('🚧 opens in ' + opens + ' mo');
+        if (!opens && b.type !== 'rd' && b.workers < need) issues.push('understaffed');
         if (b.condition < 60) issues.push('poor condition');
         if (b.type === 'store' && !b.slots.some(s => s.product)) issues.push('empty shelves');
         if (b.report.note.includes('short')) issues.push('input shortage');
@@ -35,6 +37,13 @@ export function buildingsScreen(): HTMLElement {
 
 // ---------- Market
 let mFilter: ProductId | '' = '';
+/** The Market tab: one screen with a switch between the local (city) market and the world market. */
+let marketView: 'local' | 'world' = 'local';
+export function marketHub(): HTMLElement {
+  const btn = (k: 'local' | 'world', label: string) => h('button', { class: marketView === k ? 'primary' : '', onclick: () => { marketView = k; S.render(); } }, label);
+  return h('div', null, h('div', { class: 'row', style: 'gap:4px;margin-bottom:8px' }, btn('local', 'Local market'), btn('world', 'World market')),
+    marketView === 'local' ? marketScreen() : worldScreen());
+}
 export function marketScreen(): HTMLElement {
   const v = S.view!;
   const prodTable = h('table', null, h('thead', null, h('tr', null, ['Product', 'Type', 'Market index', 'Reference price', 'Import price', 'Retail ref.', 'Demand idx', 'My tech', 'My brand'].map((x, i) => h('th', { class: i > 1 ? 'num' : '' }, x)))),
@@ -84,7 +93,7 @@ export function harbourTable(cityIds?: number[]): HTMLElement {
 export function financeScreen(): HTMLElement {
   const v = S.view!; const me = v.me; const L = me.ledger;
   const lines: [string, number][] = [['Revenue', L.revenue], ['Purchases', -L.purchases], ['Transport', -L.transport], ['Wages', -L.wages], ['Maintenance', -L.maint], ['Advertising', -L.ads], ['Interest', -L.interest], [me.taxBreak && me.taxBreak.until > v.turn ? `Tax (25%, −${Math.round(me.taxBreak.cut * 100)}% break)` : 'Tax (25%)', -L.tax]];
-  const cv = h('canvas', { width: 640, height: 260 });
+  const cv = crisp(h('canvas'), 640, 260);
   setTimeout(() => chart(cv), 0);
   return h('div', { class: 'grid2' },
     h('div', { class: 'col' },
@@ -163,30 +172,18 @@ function offersPanel(): HTMLElement {
   return h('div', { class: 'panel' }, h('h2', null, 'Credit offers'), full ? h('div', { class: 'bad small' }, 'You already have ' + MAX_LOANS + ' open loans.') : null, LENDERS.map(card));
 }
 function chart(cv: HTMLCanvasElement) {
-  const hist = S.view!.me.history; const g = cv.getContext('2d')!; g.clearRect(0, 0, cv.width, cv.height); g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height);
-  if (hist.length < 2) { g.fillStyle = '#777'; g.font = '14px system-ui'; g.fillText('Play a few turns to see history.', 20, 30); return; }
+  const hist = S.view!.me.history; const g = cv.getContext('2d')!; g.clearRect(0, 0, 640, 260); g.fillStyle = '#fff'; g.fillRect(0, 0, 640, 260);
+  if (hist.length < 2) { g.fillStyle = '#777'; g.font = '14px system-ui'; g.fillText(tr('Play a few turns to see history.'), 20, 30); return; }
   const series: [keyof typeof hist[0], string][] = [['netWorth', '#1f4e8c'], ['cash', '#1c7c3a'], ['profit', '#d98c00']];
   const all = hist.flatMap(p => series.map(([k]) => p[k] as number)); const lo = Math.min(0, ...all), hi = Math.max(1, ...all);
-  const X = (i: number) => 60 + i / (hist.length - 1) * (cv.width - 80), Y = (val: number) => cv.height - 25 - (val - lo) / (hi - lo) * (cv.height - 45);
+  const X = (i: number) => 60 + i / (hist.length - 1) * (640 - 80), Y = (val: number) => 260 - 25 - (val - lo) / (hi - lo) * (260 - 45);
   g.strokeStyle = '#ddd'; g.fillStyle = '#666'; g.font = '11px system-ui'; g.textAlign = 'right';
-  for (let i = 0; i <= 4; i++) { const val = lo + (hi - lo) * i / 4; g.beginPath(); g.moveTo(60, Y(val)); g.lineTo(cv.width - 20, Y(val)); g.stroke(); g.fillText(Math.abs(val) >= 1e6 ? (val / 1e6).toFixed(1) + 'M' : Math.round(val / 1000) + 'k', 54, Y(val) + 4); }
+  for (let i = 0; i <= 4; i++) { const val = lo + (hi - lo) * i / 4; g.beginPath(); g.moveTo(60, Y(val)); g.lineTo(640 - 20, Y(val)); g.stroke(); g.fillText(Math.abs(val) >= 1e6 ? (val / 1e6).toFixed(1) + 'M' : Math.round(val / 1000) + 'k', 54, Y(val) + 4); }
   for (const [k, col] of series) { g.strokeStyle = col; g.lineWidth = 2; g.beginPath(); hist.forEach((p, i) => i ? g.lineTo(X(i), Y(p[k] as number)) : g.moveTo(X(i), Y(p[k] as number))); g.stroke(); }
-  g.textAlign = 'center'; g.fillStyle = '#666'; g.fillText('turn ' + hist[0].turn, 60, cv.height - 8); g.fillText('turn ' + hist[hist.length - 1].turn, cv.width - 30, cv.height - 8);
+  g.textAlign = 'center'; g.fillStyle = '#666'; g.fillText(tr('turn ') + hist[0].turn, 60, 260 - 8); g.fillText(tr('turn ') + hist[hist.length - 1].turn, 640 - 30, 260 - 8);
 }
 
 // ---------- Marketing
-export function marketingScreen(): HTMLElement {
-  const v = S.view!; const me = v.me;
-  const total = Object.values(me.ads).reduce((a, b) => a + (b ?? 0), 0);
-  return h('div', { class: 'panel' }, h('h2', null, 'Advertising — ' + money(total) + ' / month'), h('div', { class: 'note' }, 'Brand awareness boosts how attractive your shelves are against competitors. It decays 8% per month, so campaigns must be sustained. Spending has diminishing returns (square-root curve).'),
-    h('img', { class: 'hero', src: asset('title/t_ads.jpg'), style: 'height:110px;max-width:600px;margin-top:8px' }),
-    h('table', null, h('thead', null, h('tr', null, ['Product', 'Brand', 'Tech', 'Monthly ad budget'].map(x => h('th', null, x)))), h('tbody', null,
-      PRODUCT_LIST.filter(p => p.kind === 'consumer').map(p => {
-        const inp = h('input', { type: 'number', value: me.ads[p.id] ?? 0, step: 1000, min: 0 }); inp.addEventListener('change', () => act({ type: 'setAds', product: p.id, budget: +inp.value }));
-        return h('tr', null, h('td', null, p.name), h('td', null, h('div', { class: 'row' }, h('div', { class: 'bar', style: 'width:120px' }, h('div', { style: 'width:' + me.brand[p.id] + '%' })), me.brand[p.id].toFixed(0))),
-          h('td', null, me.tech[p.id].toFixed(0)), h('td', null, inp));
-      }))));
-}
 
 // ---------- Rankings
 export function rankingsScreen(): HTMLElement {

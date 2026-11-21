@@ -47,6 +47,7 @@ export const mallShowOnMap = (m: MallInfo) => { S.city = m.city; S.sel = m.idx; 
 export function mallRentPanel(m: MallInfo): HTMLElement {
   const v = S.view!; const mine = m.tenants.filter(t => t.company === v.me.id);
   return h('div', { class: 'cfg scroll col' }, h('div', { class: 'row' }, h('b', { style: 'font-size:15px' }, '🏬 ' + m.name), h('span', { class: 'muted' }, 'owned by ' + (companyOf(m.owner)?.name ?? '?') + ' · condition ' + m.cond + '%')),
+    m.opensIn ? h('div', { class: 'good' }, `🚧 Under construction — opens in ${m.opensIn} month${m.opensIn === 1 ? '' : 's'}. Reserve a unit now: the lease and rent start when it opens.`) : null,
     h('div', null, `Rent ${money(m.rent)}/month per unit · ${m.tenants.length}/${MALL_UNITS} units let · ${MALL_LEASE}-month leases`),
     m.tenants.length ? h('div', { class: 'note' }, 'Tenants: ' + m.tenants.map(t => (companyOf(t.company)?.name ?? '?') + ' (' + (t.product ? PRODUCTS[t.product].name : '—') + ')').join(', ')) : null,
     mine.map(t => h('div', null, h('button', { onclick: () => { S.buildingId = t.building; S.cfgTab = 'Shelves'; S.render(); } }, 'Open my ' + (t.product ? PRODUCTS[t.product].name.toLowerCase() : '') + ' shop'))),
@@ -56,9 +57,9 @@ function mallsSection(): HTMLElement {
   const v = S.view!;
   return h('div', { class: 'panel', style: 'margin-top:10px' }, h('h2', null, 'Shopping malls — rent a unit (' + v.malls.length + ')'),
     h('div', { class: 'note' }, `A mall unit sells one branded product (your brand in it must be at least ${MALL_MIN_BRAND}). Tenants get extra foot traffic and a stronger brand pull, and pay the owner a monthly rent. Build your own mall on a downtown or suburb lot to become a landlord.`),
-    v.malls.length ? h('table', null, h('thead', null, h('tr', null, ['Mall', 'City', 'Owner', 'Rent / unit', 'Units let', 'Condition', 'Tenants'].map((x, i) => h('th', { class: i > 2 && i < 6 ? 'num' : '' }, x)))),
+    v.malls.length ? h('table', null, h('thead', null, h('tr', null, ['Mall', 'City', 'Owner', 'Rent / unit', 'Units let', 'Condition', 'Status', 'Tenants'].map((x, i) => h('th', { class: i > 2 && i < 6 ? 'num' : '' }, x)))),
       h('tbody', null, v.malls.map(m => h('tr', { class: 'clickable', onclick: () => mallShowOnMap(m) }, h('td', null, m.name), h('td', null, v.cities[m.city].name), h('td', null, companyOf(m.owner)?.name ?? '?'),
-        h('td', { class: 'num' }, money(m.rent)), h('td', { class: 'num' }, m.tenants.length + '/' + MALL_UNITS), h('td', { class: 'num' }, m.cond + '%'),
+        h('td', { class: 'num' }, money(m.rent)), h('td', { class: 'num' }, m.tenants.length + '/' + MALL_UNITS), h('td', { class: 'num' }, m.cond + '%'), h('td', null, m.opensIn ? '🚧 opens in ' + m.opensIn + ' mo' : 'open'),
         h('td', null, m.tenants.map(t => t.product ? PRODUCTS[t.product].name : '').filter(Boolean).join(', ') || '—'))))) : h('div', { class: 'muted' }, 'No mall has been built yet.'));
 }
 

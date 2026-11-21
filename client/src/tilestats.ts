@@ -1,8 +1,9 @@
 // "Selected tile stats" area (bottom-left): photo, owner, key figures and a 12-month profit chart.
+import { tr } from './i18n.js';
 import { BUILDINGS, PRODUCTS, TERRAIN_INFO, MODULES, type Terrain } from '../../shared/data.js';
-import { capacity, requiredWorkers, slotCapacity, terrainAt, railMap, tilePop, tileTransport, lotPrice, RAIL_COST_MUL, RAIL_SHIP_MUL } from '../../shared/engine.js';
+import { capacity, requiredWorkers, slotCapacity, terrainAt, railMap, tilePop, tileTransport, lotPrice, RAIL_SHIP_MUL } from '../../shared/engine.js';
 import type { Building } from '../../shared/types.js';
-import { h, money, num, asset, cls } from './util.js';
+import { h, money, num, asset, cls, crisp } from './util.js';
 import { S, companyOf } from './state.js';
 
 const TERRAIN_PHOTO: Record<string, string> = {
@@ -12,9 +13,9 @@ const TERRAIN_PHOTO: Record<string, string> = {
 const PHOTO_H = 'height:clamp(80px,15vh,140px)';
 
 export function miniChart(values: number[], w: number, hgt: number, color = '#c0392b'): HTMLCanvasElement {
-  const cv = h('canvas', { width: w, height: hgt, style: 'display:block;background:#fff;border:1px solid #b9b9b0' });
+  const cv = crisp(h('canvas', { style: 'display:block;background:#fff;border:1px solid #b9b9b0' }), w, hgt);
   const g = cv.getContext('2d')!;
-  if (values.length < 2) { g.fillStyle = '#888'; g.font = '12px system-ui'; g.fillText('Play a few turns to see history.', 8, hgt / 2); return cv; }
+  if (values.length < 2) { g.fillStyle = '#888'; g.font = '12px system-ui'; g.fillText(tr('Play a few turns to see history.'), 8, hgt / 2); return cv; }
   const lo = Math.min(0, ...values), hi = Math.max(1, ...values), pad = 18;
   const X = (i: number) => 6 + i / (values.length - 1) * (w - 12), Y = (v: number) => hgt - pad - (v - lo) / (hi - lo) * (hgt - pad - 12);
   g.strokeStyle = '#999'; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(0, Y(0)); g.lineTo(w, Y(0)); g.stroke(); g.setLineDash([]);
@@ -56,7 +57,7 @@ function buildingStats(b: Building): HTMLElement {
     h('div', { class: 'col grow', style: 'gap:6px;min-width:0' }, companyBox(b.owner),
       kvRows([['Employees', b.workers + (b.type === 'rd' ? '' : ' / ' + need)], ['Units', units], ['Unit level (robots)', String(Math.round(b.auto * 10) / 10)],
         ['Utilization', b.type === 'rd' ? '+' + util.toFixed(2) + ' tech' : Math.round(util * 100) + '%'], ['Stock', num(stock)], ['Quality', quality], ['Condition', b.condition.toFixed(0) + '%'],
-        ['Last month result', h('span', { class: cls(res) }, money(res))], ['Population here', num(tilePop({ cities: v.cities, world: S.world! }, b.idx))], ['Transport availability', tileTransport({ cities: v.cities, world: S.world! }, b.idx) + ' / 100'], ['Price to build here', money(lotPrice({ cities: v.cities, world: S.world! }, b.idx))], ['Railway', (railMap({ world: S.world! })?.comp[b.idx] ?? -1) >= 0 ? 'connected: −' + Math.round((1 - RAIL_COST_MUL) * 100) + '% freight, ×' + RAIL_SHIP_MUL + ' shipments' : 'none nearby'], ['City', city.name]]),
+        ['Last month result', h('span', { class: cls(res) }, money(res))], ['Population here', num(tilePop({ cities: v.cities, world: S.world! }, b.idx))], ['Transport availability', tileTransport({ cities: v.cities, world: S.world! }, b.idx) + ' / 100'], ['Price to build here', money(lotPrice({ cities: v.cities, world: S.world! }, b.idx))], ['Railway', (railMap({ world: S.world! })?.comp[b.idx] ?? -1) >= 0 ? 'connected: rail tiles cost 1, ×' + RAIL_SHIP_MUL + ' shipments' : 'none nearby'], ['City', city.name]]),
       mods ? h('div', { class: 'note' }, 'Facility: ' + mods) : null,
       b.type === 'store' ? h('div', { class: 'row', style: 'gap:4px' }, b.slots.filter(sl => sl.product).map(sl => h('img', { src: asset(PRODUCTS[sl.product!].photo), title: PRODUCTS[sl.product!].name + ' · stock ' + num(sl.stock.qty), style: 'width:48px;height:36px;object-fit:cover;border:2px inset #8a8470' }))) : null));
 }

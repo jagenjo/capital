@@ -54,6 +54,7 @@ export interface Building {
   sources: Partial<Record<ProductId, string>>;
   listPrice: number | null;
   slots: StoreSlot[];
+  building?: number;            // months of construction still to go: the building does nothing until it is finished
   rent?: number;                // mall: asking rent per unit / mall unit: monthly rent being paid
   mall?: string; leaseEnd?: number; // mall unit (a small store inside someone's mall): the mall's building id, lease end turn
   layout?: LayoutCell[]; // factory facility grid (cells)
@@ -89,12 +90,15 @@ export interface Person {
   skill: number;      // advisor skill 1-10 (more and better insights)
   salary: number;     // per month
   assigned?: string | null; hiredTurn?: number;
+  term?: number; contractEnd?: number; // contract length in months; the turn it expires (staff only)
+  myBid?: number; bidders?: number; // view only
+  bids?: { company: string; salary: number }[]; // sealed bids on the job market; the highest wins when the turn ends
 }
 /** A ready-built facility for sale: cheaper than building from scratch, but worn. */
 export interface Vacancy {
   id: string; type: BuildingType; city: number; idx: number; product: ProductId | null;
   cond: number; land: number; build: number; // condition %, price of the land and of the building
-  listedTurn: number; origin: 'closure' | 'bankrupt' | 'estate';
+  listedTurn: number; origin: 'closure' | 'bankrupt' | 'estate'; perm?: boolean; // perm: never expires
 }
 /** A city's offer to the first company that sets up a kind of business in its area. */
 export interface Subsidy {
@@ -111,7 +115,6 @@ export interface Company {
   cash: number; debt: number;
   tech: Record<ProductId, number>;
   brand: Record<ProductId, number>;
-  ads: Partial<Record<ProductId, number>>;
   ledger: Ledger;
   history: HistoryPoint[];
   ready: boolean; bankrupt: boolean; negMonths: number; lossCarry: number;
@@ -124,11 +127,17 @@ export interface Company {
   research?: Partial<Record<ProductId, number>>; // R&D points spent unlocking hi-tech products
 }
 
+/** A private message between two companies. */
+export interface Message { id: number; from: string; to: string; turn: number; text: string; seen?: boolean }
 export interface Lot { owner: string; paid: number }
-export interface NewsItem { turn: number; text: string; kind: 'info' | 'good' | 'bad'; tag?: 'opening' | 'product' | 'market' | 'vacant' | 'subsidy' }
+export interface NewsItem { turn: number; text: string; kind: 'info' | 'good' | 'bad'; tag?: 'opening' | 'product' | 'market' | 'vacant' | 'subsidy' | 'announce' }
 export interface Effect { kind: string; until: number; city?: number; product?: ProductId; value: number }
 
+export interface AdContract { id: string; owner: string; media: string; product: ProductId; fee: number; start: number; end: number }
+
 export interface GameState {
+  adContracts?: AdContract[]; // running advertising contracts with media outlets
+  messages?: Message[];
   subsidies?: Subsidy[]; // open city incentives
   vacant?: Vacancy[]; // facilities for sale
   candidates?: Person[]; // job market shared by all companies
@@ -172,7 +181,8 @@ export type Action =
   | { type: 'upgradeAuto'; id: string }
   | { type: 'upgradeSize'; id: string }
   | { type: 'setSlot'; id: string; slot: number; product: ProductId | null; price: number; order: number; source: string }
-  | { type: 'setAds'; product: ProductId; budget: number }
+  | { type: 'adContract'; media: string; product: ProductId; months: number }
+  | { type: 'cancelAd'; id: string }
   | { type: 'rename'; id: string; name: string }
   | { type: 'takeLoan'; lender: string; amount: number; term: number; collateral: string[] }
   | { type: 'repayLoan'; id: string; amount: number }
@@ -183,12 +193,15 @@ export type Action =
   | { type: 'buyVacant'; id: string }
   | { type: 'setRent'; id: string; rent: number }
   | { type: 'rentUnit'; id: string; product: ProductId }
-  | { type: 'hire'; id: string }
+  | { type: 'sendMessage'; to: string; text: string }
+  | { type: 'readMessages'; from: string }
+  | { type: 'bid'; id: string; salary: number }
+  | { type: 'withdrawBid'; id: string }
   | { type: 'fire'; id: string }
   | { type: 'assign'; id: string; building: string | null }
   | { type: 'setPolicy'; dividend: number; invest: number; target: 'facilities' | 'rd' | 'debt' };
 
-export interface MallInfo { id: string; owner: string; name: string; city: number; idx: number; rent: number; units: number; cond: number; tenants: { company: string; product: ProductId | null; rent: number; leaseEnd: number; building: string }[] }
+export interface MallInfo { opensIn: number; id: string; owner: string; name: string; city: number; idx: number; rent: number; units: number; cond: number; tenants: { company: string; product: ProductId | null; rent: number; leaseEnd: number; building: string }[] }
 export interface Listing { building: string; company: string; city: number; product: ProductId; price: number; qty: number; q: number }
 
 // What the client receives
@@ -200,7 +213,7 @@ export interface View {
   dist: number[][];
   me: Company & { netWorth: number; maxDebt: number; overdraftLimit: number };
   buildings: Building[];             // own buildings (full)
-  others: { id: string; owner: string; type: BuildingType; city: number; idx: number; name: string; product: ProductId | null }[];
+  others: { building?: number; id: string; owner: string; type: BuildingType; city: number; idx: number; name: string; product: ProductId | null }[];
   companies: { id: string; name: string; color: string; portrait: number; isAI: boolean; netWorth: number; price: number; prevPrice: number; priceHist: number[]; shares: number; float: number; held: number; lastDps: number; holders: { id: string; qty: number }[]; buildings: number; ready: boolean; bankrupt: boolean; online: boolean }[];
   lots: Record<string, Lot>;
   market: Record<string, { idx: number; demand: number; importPrice: number; retail: number; worldSold: number; prev: number }>;
@@ -209,6 +222,6 @@ export interface View {
   cityLabor: { used: number; pool: number }[];
   news: NewsItem[];
   finished: boolean; winner?: string; endReason?: string;
-  subsidies: Subsidy[]; malls: MallInfo[]; vacant: Vacancy[]; candidates: Person[]; advice: { topic: string; text: string; tone: 'good' | 'bad' | 'info'; building?: string }[];
+  adContracts: AdContract[]; mediaUsed: Record<string, number>; competitors: (Omit<Person, 'bids'> & { company: string; monthsLeft: number; offerable: boolean })[]; messages: Message[]; subsidies: Subsidy[]; malls: MallInfo[]; vacant: Vacancy[]; candidates: (Omit<Person, 'bids'> & { myBid?: number; bidders: number })[]; advice: { topic: string; text: string; tone: 'good' | 'bad' | 'info'; building?: string }[];
   rankings: { id: string; name: string; netWorth: number }[];
 }

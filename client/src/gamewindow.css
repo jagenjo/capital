@@ -108,3 +108,11 @@ select.nosrc { border-color:#b3261e !important; background:#fff1ee !important; c
 .statbar{display:block;height:7px;background:#ddd}.statbar i{display:block;height:100%;background:#3a7}
 .mgrchip{display:flex;align-items:center;gap:6px;padding:3px 8px;background:#eef3e6;border-bottom:1px solid #d6d6cc}
 .mgrchip img{width:24px;height:24px;image-rendering:pixelated}
+.pie{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
+.pielegend{border-collapse:collapse;font-size:12px}.pielegend td{padding:2px 6px}
+.conv{padding:5px 6px;border-bottom:1px solid #e3e3dc}.conv.sel{background:#e8eef7}
+.badge{background:#c0392b;color:#fff;border-radius:9px;padding:0 6px;font-size:11px;margin-left:6px}
+.thread{max-height:340px;overflow:auto;display:flex;flex-direction:column;gap:6px;padding:4px;background:#fbfbf6;border:1px solid #d6d6cc}
+.msg{max-width:80%;padding:4px 8px;border-radius:4px}.msg.mine{align-self:flex-end;background:#dce9f7}.msg.theirs{align-self:flex-start;background:#ece9dc}
+.nav { flex-wrap:nowrap; overflow:hidden; }
+.nav button { padding:3px 8px; white-space:nowrap; font-size:12px; }

@@ -30,7 +30,7 @@ tr.clickable { cursor:pointer; } tr.clickable:hover td { background:#f3f6fb; }
 .topbar .stat { display:flex; flex-direction:column; line-height:1.1; } .topbar .stat small { color:#9fb0d0; font-size:11px; text-transform:uppercase; }
 .topbar img.portrait { width:36px; height:36px; border:2px solid #fff; image-rendering:pixelated; }
 .nav { display:flex; background:#2a3a5c; padding:0 10px; gap:2px; flex-wrap:wrap; }
-.nav button { background:transparent; color:#cfd8ea; border:0; border-radius:0; padding:8px 14px; }
+.nav button { background:transparent; color:#cfd8ea; border:0; border-radius:0; padding:8px 10px; }
 .nav button.active { background:var(--bg); color:var(--ink); font-weight:600; }
 .nav button:hover:not(:disabled) { background:#3a4c74; color:#fff; border:0; } .nav button.active:hover:not(:disabled){ background:var(--bg); color:var(--ink) }
 .content { padding:14px; max-width:1400px; margin:0 auto; }
@@ -76,3 +76,11 @@ table.stats { width:auto; } table.stats th { text-transform:none; letter-spacing
 .cfg.multi { display:block; column-count:2; column-gap:22px; } .cfg.multi > * { break-inside:avoid; margin-bottom:8px; } .cfg.multi > h3 { break-after:avoid; }
 @media (max-width:1250px) { .cfg.multi { column-count:1; } }
 table.stats th, table.stats td { padding:1px 8px !important; font-size:12px; }
+
+.ico { display:inline-flex; vertical-align:-3px; margin-right:5px } .ico svg { display:block } .nav button .ico { opacity:.85 } .stat small .ico { margin-right:3px; vertical-align:-3px } .stat small .ico svg { width:12px; height:12px } h2 .ico, h3 .ico { margin-right:7px }
+canvas.chart { image-rendering:auto; }
+.mediagrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:10px } .mediacard { background:#fbfaf3; border:1px solid var(--line); padding:8px; display:flex; flex-direction:column; gap:6px } .mediacard button { align-self:flex-start } .mediaico { width:30px; height:30px; background:#2a3a5c; color:#fff; display:flex; align-items:center; justify-content:center } .mediaico .ico { margin:0 } .mediaico svg { width:20px; height:20px }
+.adchip { display:inline-flex; align-items:center; white-space:nowrap; background:#2a3a5c; color:#fff; padding:2px 7px; margin-right:4px; font-size:12px } .adchip .ico { margin-right:4px }
+.areachip { margin:4px 0; padding:4px 8px; background:#fbf6dd; border:1px solid #d9c96a; font-size:12px }
+.costtoggle { display:block; margin:4px 0; font-size:12px } .costtoggle input { margin-right:4px }
+.turnpanel { position:fixed; top:64px; right:14px; width:290px; background:#fbfaf3; border:2px solid #2a3a5c; box-shadow:0 4px 16px rgba(0,0,0,.35); padding:8px 10px; z-index:50; font-size:12px } .turnpanel table { width:100%; border-collapse:collapse; margin-top:6px } .turnpanel td { padding:2px 0 } .turnpanel tr.sub td:first-child { padding-left:14px; color:#666 } .turnpanel tr.sub td { font-size:11px } .turnpanel tr.tot td { border-top:1px solid #bbb; font-weight:bold; padding-top:4px }

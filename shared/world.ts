@@ -157,7 +157,7 @@ export function buildWorld(s: GameState) {
       const i = yy * WW + xx; if (tiles[i] !== 'a' || !ext[i]) continue;
       const d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; }
     }
-    if (best >= 0 && (city.town || Math.sqrt(bd) > city.radius + 4)) best = -1; // towns have no port; sea too far away: inland city
+    if (best >= 0 && (city.town || (city.id !== 0 && Math.sqrt(bd) > city.radius + 4))) best = -1; // city 0 is the metropolis: it always gets a harbour; // towns have no port; sea too far away: inland city
     city.port = best >= 0;
     if (best >= 0) {
       // walk from the city centre toward the water (4-connected), turning the land into suburb tiles so the city really touches the sea
@@ -214,7 +214,7 @@ export function buildWorld(s: GameState) {
   // --- travel distance matrix (roads fast, ferries across sea)
   s.dist = cities.map(() => cities.map(() => 0));
   cities.forEach((_, a) => { const { dist } = dijkstra(tiles, centers[a], travelCost); cities.forEach((__, b) => { s.dist![a][b] = a === b ? 15 : Math.round(dist[centers[b]] * WORLD_SCALE); }); });
-  s.world = { v: 20, w: WW, h: WH, tiles: tiles.join(''), rails };
+  s.world = { v: 28, w: WW, h: WH, tiles: tiles.join(''), rails };
 }
 
 export const nearestCity = (cities: { x: number; y: number }[], idx: number): number => {

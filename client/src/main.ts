@@ -1,16 +1,23 @@
 import { COMPANY_COLORS } from '../../shared/data.js';
-import { h, money, asset, toast } from './util.js';
+import { h, money, asset, toast, langButton } from './util.js';
+import { tr } from './i18n.js';
+import { icon } from './icons.js';
+import { showTurnSummary } from './turnsummary.js';
+import { settingsScreen } from './settings.js';
 import { api } from './api.js';
 import { S } from './state.js';
 import { mapScreen } from './map.js';
 import { makeWorldImage, findResources } from './worldmap.js';
 import { chainScreen } from './chain.js';
-import { buildingsScreen, marketScreen, worldScreen, financeScreen, marketingScreen, rankingsScreen } from './tabs.js';
+import { buildingsScreen, marketHub, financeScreen, rankingsScreen } from './tabs.js';
+import { marketingScreen } from './advertising.js';
 import { newsScreen } from './news.js';
 import { encyclopediaScreen } from './encyclopedia.js';
 import { stocksScreen } from './stocks.js';
 import { personnelScreen } from './personnel.js';
 import { realEstateScreen } from './realestate.js';
+import { analyticsScreen } from './analytics.js';
+import { messagesScreen, unreadCount } from './messages.js';
 
 const app = document.getElementById('app')!;
 const tokens: Record<string, string> = JSON.parse(localStorage.getItem('capital.tokens') ?? '{}');
@@ -43,7 +50,7 @@ async function lobby() {
   };
 
   app.replaceChildren(h('div', { class: 'login' },
-    h('div', { class: 'title' }, h('img', { src: asset('title/corp-1.jpg') }), h('div', null, h('h1', null, 'CAPITAL'), h('div', { class: 'muted' }, 'A turn-based multiplayer business game. One turn = one month.'), h('a', { href: '/admin.html' }, 'Admin panel → create a game'))),
+    h('div', { class: 'title' }, h('img', { src: asset('title/corp-1.jpg') }), h('div', null, h('h1', null, 'CAPITAL'), h('div', { class: 'muted' }, 'A turn-based multiplayer business game. One turn = one month.'), h('a', { href: '/admin.html' }, 'Admin panel → create a game'), h('div', { style: 'margin-top:6px' }, langButton(lobby)))),
     h('div', { class: 'grid2' },
       h('div', { class: 'panel col' }, h('h2', null, 'Player'), name, pw, gpw, comp, h('h3', null, 'CEO portrait'), portraits, h('h3', null, 'Company colour'), colors,
         h('div', { class: 'note' }, 'Your name + password identify you in a game. Use them again to continue later from any browser.')),
@@ -66,32 +73,33 @@ async function refresh(first: boolean) {
   const changed = lastTurn >= 0 && v.turn !== lastTurn;
   if (first) { S.city = v.cities.reduce((best, c) => c.pop > v.cities[best].pop ? c.id : best, 0); }
   // avoid wiping the UI while the player is typing
-  const typing = document.activeElement && ['INPUT', 'SELECT'].includes(document.activeElement.tagName) && !first && !changed;
-  S.view = v; lastTurn = v.turn;
-  if (changed) toast(`A new month begins: ${v.date}`, 'ok');
+  const typing = document.activeElement && ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName) && !first && !changed;
+  const oldUnread = S.view ? unreadCount() : 0; S.view = v; lastTurn = v.turn;
+  if (!first && unreadCount() > oldUnread) toast('New message received', 'ok');
+  if (changed) { toast(`A new month begins: ${v.date}`, 'ok'); showTurnSummary(v); }
   if (!typing) render(); else updateTop();
 }
 
-const TABS: [string, string][] = [['map', 'Map & building'], ['buildings', 'My buildings'], ['chain', 'Supply chain'], ['market', 'Local market'], ['world', 'World market'], ['finance', 'Finance'], ['stocks', 'Stock market'], ['personnel', 'Personnel'], ['realestate', 'Real estate'], ['marketing', 'Advertising'], ['rankings', 'Rankings'], ['news', 'News'], ['encyclopedia', 'Encyclopedia']];
+const TABS: [string, string][] = [['map', 'Map & building'], ['buildings', 'My buildings'], ['chain', 'Supply chain'], ['market', 'Market'], ['finance', 'Finance'], ['analytics', 'Analytics'], ['stocks', 'Stock market'], ['personnel', 'Personnel'], ['realestate', 'Real estate'], ['marketing', 'Advertising'], ['rankings', 'Rankings'], ['news', 'News'], ['messages', 'Messages'], ['encyclopedia', 'Encyclopedia'], ['settings', 'Settings']];
 function render() {
   const v = S.view; if (!v) return;
   const me = v.me;
   const readyBtn = h('button', { class: me.ready ? '' : 'primary', disabled: v.finished || v.paused, title: 'Shift+click: debug — play the turn right now', onclick: async (e: MouseEvent) => { try { S.view = (await api.ready(S.gameId, S.token, e.shiftKey ? true : !me.ready, e.shiftKey)).view; render(); } catch (e: any) { toast(e.message, 'err'); } } },
-    me.ready ? '✔ Ready — click to unready' : 'End turn ▶');
+    me.ready ? [icon('ready'), 'Ready — click to unready'] : ['End turn', icon('next')]);
   const top = h('div', { class: 'topbar' },
     h('img', { class: 'portrait', src: asset(`person/${String(me.portrait).padStart(2, '0')}.png`), style: `border-color:${me.color}` }),
     h('div', { class: 'stat' }, h('b', null, me.name), h('small', null, v.gameName)),
-    h('div', { class: 'stat' }, h('b', null, v.date), h('small', null, `turn ${v.turn}/${v.settings.maxMonths}`)),
-    h('div', { class: 'stat' }, h('b', { style: me.cash < 0 ? 'color:#ff8d85' : '' }, money(me.cash)), h('small', null, 'cash')),
-    h('div', { class: 'stat' }, h('b', null, money(me.netWorth)), h('small', null, 'net worth')),
-    h('div', { class: 'stat' }, h('b', null, money(me.debt)), h('small', null, 'debt')),
+    h('div', { class: 'stat' }, h('b', null, icon('clock'), v.date), h('small', null, `turn ${v.turn}/${v.settings.maxMonths}`)),
+    h('div', { class: 'stat' }, h('b', { style: me.cash < 0 ? 'color:#ff8d85' : '' }, money(me.cash)), h('small', null, icon('cash'), 'cash')),
+    h('div', { class: 'stat' }, h('b', null, money(me.netWorth)), h('small', null, icon('worth'), 'net worth')),
+    h('div', { class: 'stat' }, h('b', null, money(me.debt)), h('small', null, icon('debt'), 'debt')),
     h('div', { class: 'stat' }, h('b', { id: 'countdown' }, countdown()), h('small', null, v.paused ? 'paused' : 'next auto-turn')),
-    h('div', { class: 'stat' }, h('b', null, `${v.companies.filter(c => !c.isAI && c.ready).length}/${v.companies.filter(c => !c.isAI && !c.bankrupt).length}`), h('small', null, 'players ready')),
-    h('span', { class: 'grow' }), readyBtn, h('button', { onclick: lobby }, 'Leave'));
-  const nav = h('div', { class: 'nav' }, TABS.map(([k, label]) => h('button', { class: S.tab === k ? 'active' : '', onclick: () => { S.tab = k; render(); } }, label)));
+    h('div', { class: 'stat' }, h('b', null, `${v.companies.filter(c => !c.isAI && c.ready).length}/${v.companies.filter(c => !c.isAI && !c.bankrupt).length}`), h('small', null, icon('personnel'), 'players ready')),
+    h('span', { class: 'grow' }), readyBtn, h('button', { onclick: lobby }, icon('leave'), 'Leave'));
+  const nav = h('div', { class: 'nav' }, TABS.map(([k, label]) => h('button', { class: S.tab === k ? 'active' : '', onclick: () => { S.tab = k; render(); } }, icon(k), label, k === 'messages' && unreadCount() > 0 ? h('span', { class: 'badge' }, String(unreadCount())) : null)));
   const banner = v.finished ? h('div', { class: 'banner end' }, `🏁 Game over — ${v.endReason ?? ''} Winner: `, h('b', null, v.companies.find(c => c.id === v.winner)?.name ?? '—'))
     : me.bankrupt ? h('div', { class: 'banner' }, 'Your company went bankrupt.') : null;
-  const body = ({ map: mapScreen, buildings: buildingsScreen, chain: chainScreen, market: marketScreen, world: worldScreen, finance: financeScreen, stocks: stocksScreen, personnel: personnelScreen, realestate: realEstateScreen, marketing: marketingScreen, rankings: rankingsScreen, news: newsScreen, encyclopedia: encyclopediaScreen } as Record<string, () => HTMLElement>)[S.tab]();
+  const body = ({ map: mapScreen, buildings: buildingsScreen, chain: chainScreen, market: marketHub, finance: financeScreen, analytics: analyticsScreen, stocks: stocksScreen, personnel: personnelScreen, realestate: realEstateScreen, marketing: marketingScreen, rankings: rankingsScreen, news: newsScreen, messages: messagesScreen, encyclopedia: encyclopediaScreen, settings: settingsScreen } as Record<string, () => HTMLElement>)[S.tab]();
   const sy = window.scrollY, oldC = app.querySelector<HTMLElement>('.content'), st = oldC && oldC.dataset.tab === S.tab ? oldC.scrollTop : 0; // the scrolling box is .content: keep its position across re-renders (5s polling)
   const content = h('div', { class: S.tab === 'map' ? 'content wide' : 'content', 'data-tab': S.tab }, body);
   app.replaceChildren(top, nav, ...(banner ? [banner] : []), content);

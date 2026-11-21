@@ -1,10 +1,10 @@
 // Static game data: products, building types, terrain. Shared by server engine and client UI.
 
 export type ProductId =
-  | 'grain' | 'livestock' | 'timber' | 'ore' | 'oil'
-  | 'steel' | 'plastics' | 'electronics'
+  | 'grain' | 'livestock' | 'timber' | 'ore' | 'copper' | 'oil'
+  | 'steel' | 'components' | 'plastics' | 'electronics'
   | 'bread' | 'meat' | 'furniture' | 'fuel' | 'clothing' | 'appliances' | 'computers' | 'cars'
-  | 'phones' | 'tvs' | 'pharma' | 'robotics' | 'drones'; // the last five are hi-tech: a company must research them (R&D) before it can manufacture them
+  | 'phones' | 'tvs' | 'pharma' | 'robotics'; // the last four are hi-tech: a company must research them (R&D) before it can manufacture them
 
 export interface ProductDef {
   id: ProductId;
@@ -33,11 +33,13 @@ const defs: RawDef[] = [
   { id: 'livestock', name: 'Livestock', kind: 'raw', recipe: {}, cap: 100, workers: 6, rawPrice: 400, spoil: 0.04, photo: 'pict/j_farmcr.jpg', unit: 'head' },
   { id: 'timber', name: 'Timber', kind: 'raw', recipe: {}, cap: 400, workers: 6, rawPrice: 90, spoil: 0, photo: 'pict/f_fore.jpg', unit: 'm³' },
   { id: 'ore', name: 'Iron ore', kind: 'raw', recipe: {}, cap: 600, workers: 8, rawPrice: 70, spoil: 0, photo: 'pict/f_mine.jpg', unit: 't' },
+  { id: 'copper', name: 'Copper ore', kind: 'raw', recipe: {}, cap: 400, workers: 8, rawPrice: 140, spoil: 0, photo: 'pict/f_mine.jpg', unit: 't' },
   { id: 'oil', name: 'Crude oil', kind: 'raw', recipe: {}, cap: 800, workers: 8, rawPrice: 60, spoil: 0, photo: 'pict/f_oil.jpg', unit: 'bbl' },
 
   { id: 'steel', name: 'Steel', kind: 'intermediate', recipe: { ore: 2 }, cap: 200, workers: 12, spoil: 0, photo: 'method/steel.jpg', unit: 't' },
+  { id: 'components', name: 'Components', kind: 'intermediate', recipe: { copper: 1.5 }, cap: 200, workers: 10, spoil: 0, photo: 'method/elecomp.jpg', unit: 'lot' },
   { id: 'plastics', name: 'Plastics', kind: 'intermediate', recipe: { oil: 1.5 }, cap: 250, workers: 10, spoil: 0, photo: 'method/paper.jpg', unit: 't' },
-  { id: 'electronics', name: 'Electronics', kind: 'intermediate', recipe: { steel: 1, plastics: 1 }, cap: 150, workers: 12, spoil: 0, photo: 'method/elecomp.jpg', unit: 'lot' },
+  { id: 'electronics', name: 'Electronics', kind: 'intermediate', recipe: { components: 1, plastics: 1 }, cap: 150, workers: 12, spoil: 0, photo: 'method/elecomp.jpg', unit: 'lot' },
 
   { id: 'bread', name: 'Bread', kind: 'consumer', recipe: { grain: 1 }, cap: 300, workers: 8, demandPerK: 5.0, spoil: 0.25, photo: 'method/bread.jpg', unit: 't' },
   { id: 'meat', name: 'Packaged meat', kind: 'consumer', recipe: { livestock: 1 }, cap: 150, workers: 8, demandPerK: 2.4, spoil: 0.2, photo: 'pict/f_fact.jpg', unit: 't' },
@@ -52,7 +54,6 @@ const defs: RawDef[] = [
   { id: 'tvs', name: 'Televisions', kind: 'consumer', recipe: { electronics: 1, steel: 0.5, plastics: 1 }, cap: 80, workers: 12, demandPerK: 0.7, spoil: 0, photo: 'pict/f_tv2.jpg', unit: 'unit', research: 70 },
   { id: 'pharma', name: 'Pharmaceuticals', kind: 'consumer', recipe: { oil: 1, plastics: 1 }, cap: 100, workers: 16, demandPerK: 0.5, spoil: 0.05, photo: 'pict/j_label.jpg', unit: 'lot', research: 120 },
   { id: 'robotics', name: 'Robotics', kind: 'intermediate', recipe: { steel: 2, electronics: 2 }, cap: 50, workers: 16, spoil: 0, photo: 'pict/j_mft.jpg', unit: 'unit', research: 100 },
-  { id: 'drones', name: 'Drones', kind: 'consumer', recipe: { robotics: 1, electronics: 1 }, cap: 40, workers: 16, demandPerK: 0.15, spoil: 0, photo: 'pict/f_rd.jpg', unit: 'unit', research: 160, after: 'robotics' },
 ];
 
 export const PRODUCTS: Record<ProductId, ProductDef> = {} as any;
@@ -96,14 +97,14 @@ export interface BuildingDef {
 export const BUILDINGS: Record<BuildingType, BuildingDef> = {
   farm: { type: 'farm', name: 'Farm', cost: 150000, terrain: ['f'], products: ['grain', 'livestock'], maintPct: 0.8, color: '#9cba4a', letter: 'F', photo: 'pict/f_farm.jpg', desc: 'Grows grain or raises livestock on farmland.' },
   forest: { type: 'forest', name: 'Logging camp', cost: 130000, terrain: ['t'], products: ['timber'], maintPct: 0.8, color: '#3f8f4f', letter: 'L', photo: 'pict/f_fore.jpg', desc: 'Harvests timber in forests.' },
-  mine: { type: 'mine', name: 'Iron mine', cost: 250000, terrain: ['e'], products: ['ore'], maintPct: 1.0, color: '#8d7b6a', letter: 'M', photo: 'pict/f_mine.jpg', desc: 'Digs iron ore out of the hills.' },
+  mine: { type: 'mine', name: 'Mine', cost: 250000, terrain: ['e'], products: ['ore', 'copper'], maintPct: 1.0, color: '#8d7b6a', letter: 'M', photo: 'pict/f_mine.jpg', desc: 'Digs iron or copper ore out of the hills.' },
   oil: { type: 'oil', name: 'Oil well', cost: 300000, terrain: ['o'], products: ['oil'], maintPct: 1.0, color: '#2c2c2c', letter: 'O', photo: 'pict/f_oil.jpg', desc: 'Pumps crude oil.' },
   factory: { type: 'factory', name: 'Factory', cost: 400000, terrain: ['g', 's', 'u', 'b'], maintPct: 1.0, color: '#c0504d', letter: 'X', photo: 'pict/f_fact.jpg', desc: 'Turns inputs into intermediate or consumer goods.' },
   store: { type: 'store', name: 'Retail store', cost: 250000, terrain: ['u', 's'], maintPct: 0.9, color: '#4a7fc0', letter: 'S', photo: 'pict/f_reta.jpg', desc: 'Sells consumer goods to the city population.' },
   mall: { type: 'mall', name: 'Shopping mall', cost: 1500000, terrain: ['u', 's'], maintPct: 0.8, color: '#b0508c', letter: 'C', photo: 'pict/f_reta.jpg', desc: 'A shopping centre with 8 units that you rent out to other companies (or use yourself). Tenants sell one branded product each and enjoy extra foot traffic.' },
   rd: { type: 'rd', name: 'R&D lab', cost: 350000, terrain: ['u', 's', 'g'], maintPct: 0.7, color: '#8a5fb5', letter: 'R', photo: 'pict/f_rd.jpg', desc: 'Researches better quality for one product.' },
 };
-export const RAW_FOR_BUILDING: Record<string, ProductId[]> = { farm: ['grain', 'livestock'], forest: ['timber'], mine: ['ore'], oil: ['oil'] };
+export const RAW_FOR_BUILDING: Record<string, ProductId[]> = { farm: ['grain', 'livestock'], forest: ['timber'], mine: ['ore', 'copper'], oil: ['oil'] };
 
 export const TERRAIN_INFO: Record<Terrain, { name: string; color: string; price: number }> = {
   d: { name: 'Deep sea', color: '#1d4f8a', price: 0 },
@@ -171,3 +172,20 @@ export const LENDERS: Lender[] = [
 ];
 
 export const MALL_UNITS = 8, MALL_MIN_BRAND = 8, MALL_FITOUT = 40000, MALL_TRAFFIC = 1.35, MALL_BRAND_BOOST = 2, MALL_LEASE = 12, MALL_PER_CITY = 2;
+
+/** Months of construction before a new building operates (ready-built vacancies are instant). */
+/** Media outlets a company can sign advertising contracts with. fee = monthly price (before term discount),
+ *  lev = how many dollars of ordinary ad budget each dollar of the fee is worth, slots = advertisers it can carry at once. */
+export interface MediaDef { id: string; name: string; kind: 'newspaper' | 'radio' | 'tv'; fee: number; lev: number; slots: number; blurb: string }
+export const MEDIA: MediaDef[] = [
+  { id: 'courier', name: 'Metro Courier', kind: 'newspaper', fee: 1500, lev: 1.25, slots: 6, blurb: 'Free daily paper. Cheap, local readers.' },
+  { id: 'ledger', name: 'The Daily Ledger', kind: 'newspaper', fee: 3000, lev: 1.4, slots: 4, blurb: 'The business paper everyone reads.' },
+  { id: 'talk', name: 'Talk Radio 99', kind: 'radio', fee: 4500, lev: 1.55, slots: 4, blurb: 'Commuters and call-in shows.' },
+  { id: 'fm', name: 'Radio Capital FM', kind: 'radio', fee: 8000, lev: 1.8, slots: 3, blurb: 'Hit music, huge audience.' },
+  { id: 'tvlocal', name: 'Local TV Network', kind: 'tv', fee: 12000, lev: 2.0, slots: 3, blurb: 'Regional evening slots.' },
+  { id: 'tv5', name: 'Channel 5', kind: 'tv', fee: 25000, lev: 2.6, slots: 2, blurb: 'Prime-time national television.' },
+];
+export const MEDIA_TERMS = [3, 6, 12]; export const MEDIA_DISCOUNT: Record<number, number> = { 3: 0, 6: 0.05, 12: 0.12 };
+export const MEDIA_CANCEL_MONTHS = 2; // cancelling early costs this many months of fee
+
+export const BUILD_TURNS: Record<BuildingType, number> = { farm: 2, forest: 2, mine: 4, oil: 4, factory: 4, store: 3, rd: 4, mall: 8 };

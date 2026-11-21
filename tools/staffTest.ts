@@ -6,11 +6,13 @@ const tiles = [...s.world!.tiles].map((ch, i) => ch === 'g' ? i : -1).filter(i =
 const f = A({ type: 'build', idx: tiles[40], btype: 'factory', product: 'bread' });
 const mg = s.candidates!.filter(p => p.kind === 'manager'), ad = s.candidates!.filter(p => p.kind === 'advisor');
 console.log('pool', mg.length, ad.length, mg[0]);
-A({ type: 'hire', id: mg[0].id }); A({ type: 'hire', id: mg[1].id }); A({ type: 'hire', id: mg[2].id }); A({ type: 'hire', id: mg[0].id });
-A({ type: 'hire', id: ad[0].id }); A({ type: 'hire', id: ad[1].id });
+const rival = addCompany(s, { name: 'Rival', playerId: 'r' });
+const B = (c: any, a: any) => { const x = applyAction(s, c.id, a) as any; console.log(c.name, a.type, x.error ? 'ERR ' + x.error : 'ok'); };
+B(me, { type: 'bid', id: mg[0].id, salary: mg[0].salary }); B(rival, { type: 'bid', id: mg[0].id, salary: mg[0].salary + 500 }); B(me, { type: 'bid', id: mg[1].id, salary: mg[1].salary - 100 }); B(me, { type: 'bid', id: mg[1].id, salary: mg[1].salary }); B(me, { type: 'bid', id: ad[0].id, salary: ad[0].salary });
+processTurn(s); console.log('me staff', me.staff?.map(p => p.name + ' ' + p.salary), 'rival staff', rival.staff?.map(p => p.name + ' ' + p.salary), 'new list', s.candidates!.length, me.news.slice(-2).map(n => n.text), rival.news.slice(-1).map(n => n.text));
 const b = s.buildings[f.info];
 console.log('eff before', efficiency(s, b));
-A({ type: 'assign', id: mg[0].id, building: b.id }); console.log('bonus', mgrBonus(s, b), 'eff after', efficiency(s, b));
+A({ type: 'assign', id: me.staff![0].id, building: b.id }); console.log('bonus', mgrBonus(s, b), 'eff after', efficiency(s, b));
 for (let i = 0; i < 3; i++) processTurn(s);
 console.log('wages', me.ledger.wages, 'pool', s.candidates!.length, 'advice', advice(s, me));
-A({ type: 'fire', id: mg[0].id }); console.log('staff', me.staff!.length);
+A({ type: 'fire', id: me.staff![0].id }); console.log('staff', me.staff!.length);

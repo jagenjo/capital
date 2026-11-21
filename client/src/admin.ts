@@ -1,4 +1,4 @@
-import { h, toast, asset } from './util.js';
+import { h, toast, asset, langButton } from './util.js';
 import { adminApi } from './api.js';
 
 let token = sessionStorage.getItem('capital.admin') ?? '';
@@ -83,7 +83,7 @@ async function panel() {
 
   app.replaceChildren(h('div', { class: 'content col' },
     h('div', { class: 'row' }, h('img', { src: asset('title/gameset.jpg'), style: 'height:60px;border:1px solid #bbb' }), h('h1', { style: 'margin:0' }, 'Capital — admin panel'), h('span', { class: 'grow' }),
-      h('a', { href: '/' }, '← Game'), h('button', { onclick: () => { token = ''; sessionStorage.removeItem('capital.admin'); loginScreen(); } }, 'Log out')),
+      h('a', { href: '/' }, '← Game'), langButton(panel), h('button', { onclick: () => { token = ''; sessionStorage.removeItem('capital.admin'); loginScreen(); } }, 'Log out')),
     createPanel, h('h2', null, `Games (${games.length})`), ...games.map(gameCard), games.length === 0 && h('div', { class: 'muted' }, 'No games yet.')));
 }
 

@@ -6,7 +6,7 @@ import { lotPrice, terrainAt, isUnlocked, subsidyText } from '../../shared/engin
 import { nearestCity } from '../../shared/world.js';
 import { h, money, asset, toast } from './util.js';
 import { S, act, companyOf } from './state.js';
-import { buildingPanel } from './building.js';
+import { buildingPanel, areaLine } from './building.js';
 import { worldPanels, focusCity, setViewSize } from './worldmap.js';
 import { statsPanel, citiesPanel } from './tilestats.js';
 import { harbourTable } from './tabs.js';
@@ -80,7 +80,7 @@ function lotPanel(idx: number): HTMLElement {
     TERRAIN_INFO[t].price && opts.length === 0 ? h('div', { class: 'muted' }, 'Nothing can be built on this terrain. Farms need farmland, logging camps forest, mines ore deposits, oil wells oil fields; stores need downtown/suburb.') : h('div', { class: 'col' },
       opts.map(d => h('div', { class: 'row', style: 'border-top:1px solid #e3e3dc;padding-top:6px' },
         h('img', { src: asset(d.photo), style: 'width:80px;height:52px;object-fit:cover;border:1px solid #bbb' }),
-        h('div', { class: 'grow' }, h('b', null, d.name), h('div', { class: 'note' }, d.desc), d.type === 'factory' && factProduct, d.type === 'farm' && rawProduct, (() => { const x = subFor(d); return x ? h('div', { class: 'good', style: 'font-weight:bold' }, '🎁 ' + v.cities[cityId].name + ' offers ' + subsidyText(x)) : null; })()),
+        h('div', { class: 'grow' }, h('b', null, d.name), h('div', { class: 'note' }, d.desc), areaLine(d.type, idx, false), d.type === 'factory' && factProduct, d.type === 'farm' && rawProduct, (() => { const x = subFor(d); return x ? h('div', { class: 'good', style: 'font-weight:bold' }, '🎁 ' + v.cities[cityId].name + ' offers ' + subsidyText(x)) : null; })()),
         h('button', { class: 'primary', onclick: async () => {
           const product = d.type === 'factory' ? (factProduct.value as ProductId) : d.type === 'farm' ? (rawProduct.value as ProductId) : undefined;
           const r = await act({ type: 'build', idx, btype: d.type, product });

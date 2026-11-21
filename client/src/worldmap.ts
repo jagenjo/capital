@@ -1,8 +1,9 @@
 // World tilemap views (Canvas2D):
 //  * minimap: the whole world as a 1-pixel-per-tile image, with the current viewport rectangle
 //  * main view: zoomable/pannable detailed tiles; when zoomed far out it blits the 1px-per-tile image instead of drawing tiles
+import { tr } from './i18n.js';
 import { BUILDINGS, TERRAIN_INFO, WORLD_SCALE, type Terrain } from '../../shared/data.js';
-import { lotPrice, terrainAt, railMap, tilePop, tileTransport } from '../../shared/engine.js';
+import { AREA_R, cityTile, haulRoute, haulPath, costField, HAUL_RAIL, HAUL_ROAD, HAUL_OFF, lotPrice, terrainAt, railMap, tilePop, tileTransport } from '../../shared/engine.js';
 import { nearestCity } from '../../shared/world.js';
 import { h, num, money } from './util.js';
 import { S, companyOf } from './state.js';
@@ -271,7 +272,22 @@ function drawMain(cv: HTMLCanvasElement, hoverIdx: number) {
     if (z >= 26) { g.font = `bold ${Math.round(Math.min(14, z * 0.32))}px system-ui`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round'; g.lineWidth = 3;
       for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) { const val = layerValue(layer, y * wd.w + x); if (val <= 0) continue; const t = layer === 'price' ? (val >= 1000 ? Math.round(val / 1000) + 'k' : String(Math.round(val))) : num(val); const px = (x - cam.x + 0.5) * z, py = (y - cam.y + 0.5) * z + z * 0.3; g.strokeStyle = 'rgba(0,0,0,.8)'; g.strokeText(t, px, py); g.fillStyle = '#fff'; g.fillText(t, px, py); } }
     const lg = LAYERS.find(l => l.id === layer)!; g.fillStyle = 'rgba(20,20,20,.75)'; g.fillRect(8, H - 26, 230, 20); g.fillStyle = '#fff'; g.font = '11px system-ui'; g.textAlign = 'left'; g.textBaseline = 'middle';
-    g.fillText(lg.title + ' · max ' + (layer === 'transport' ? '100' : layer === 'price' ? money(ov.max) : num(ov.max)), 14, H - 16);
+    g.fillText(tr(lg.title) + tr(' · max ') + (layer === 'transport' ? '100' : layer === 'price' ? money(ov.max) : num(ov.max)), 14, H - 16);
+  }
+  // ---- transport cost field of the facility whose toggle is on
+  const cb = S.costField ? v.buildings.find(b => b.id === S.costField) : undefined;
+  if (cb) {
+    const f = costField({ cities: v.cities, world: wd }, cb.idx); const X0 = Math.max(0, Math.floor(cam.x)), Y0 = Math.max(0, Math.floor(cam.y)), X1 = Math.min(wd.w - 1, Math.ceil(cam.x + W / z)), Y1 = Math.min(wd.h - 1, Math.ceil(cam.y + H / z));
+    const lim = Math.log10(1 + 4000); const label = z >= 26;
+    if (label) { g.font = `bold ${Math.round(Math.min(13, z * 0.3))}px system-ui`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round'; g.lineWidth = 3; }
+    for (let y = Y0; y <= Y1; y++) for (let x = X0; x <= X1; x++) {
+      const c = f[y * wd.w + x]; if (c === 65535 && (wd.tiles[y * wd.w + x] === 'd' || wd.tiles[y * wd.w + x] === 'a')) continue;
+      const sx = (x - cam.x) * z, sy = (y - cam.y) * z;
+      g.fillStyle = c === 65535 ? 'rgba(0,0,0,.45)' : `hsla(${Math.round(120 * (1 - Math.min(1, Math.log10(1 + c) / lim)))},85%,45%,.55)`; g.fillRect(sx, sy, z, z);
+      if (label && c !== 65535) { const t = c >= 1000 ? (c / 1000).toFixed(1) + 'k' : String(c); g.strokeStyle = 'rgba(0,0,0,.7)'; g.strokeText(t, sx + z / 2, sy + z / 2); g.fillStyle = '#fff'; g.fillText(t, sx + z / 2, sy + z / 2); }
+    }
+    g.fillStyle = 'rgba(20,20,20,.8)'; g.fillRect(8, H - 52, 420, 20); g.fillStyle = '#fff'; g.font = '11px system-ui'; g.textAlign = 'left'; g.textBaseline = 'middle';
+    g.fillText(tr('Transport cost field') + ' · ' + cb.name + ' · ' + tr('rail') + ' ' + HAUL_RAIL + ' · ' + tr('road') + ' ' + HAUL_ROAD + ' · ' + tr('nothing') + ' ' + HAUL_OFF, 14, H - 42);
   }
   // ---- resource icons (always visible, bigger when zoomed out)
   const isz = z >= DETAIL_ZOOM ? Math.max(10, z * 0.55) : Math.max(7, z * 1.8);
@@ -286,17 +302,18 @@ function drawMain(cv: HTMLCanvasElement, hoverIdx: number) {
   g.textAlign = 'center'; g.textBaseline = 'middle';
   for (const b of [...v.buildings.filter(x => !x.mall), ...v.others]) {
     const { x, y } = px(b.idx); if (x < -z || y < -z || x > W || y > H) continue;
-    const col = companyOf(b.owner)?.color ?? '#000';
+    const col = companyOf(b.owner)?.color ?? '#000'; g.globalAlpha = (b as any).building ? 0.45 : 1;
     if (z >= 8) {
       g.fillStyle = BUILDINGS[b.type].color; g.fillRect(x + z * 0.15, y + z * 0.15, z * 0.7, z * 0.7); g.strokeStyle = col; g.lineWidth = Math.max(2, z * 0.1); g.strokeRect(x + z * 0.15, y + z * 0.15, z * 0.7, z * 0.7);
       if (z >= 12) { g.fillStyle = '#fff'; g.font = `bold ${Math.round(z * 0.5)}px system-ui`; g.fillText(BUILDINGS[b.type].letter, x + z / 2, y + z / 2 + 1); }
     } else { g.fillStyle = col; g.fillRect(x - 1, y - 1, Math.max(4, z * 0.9), Math.max(4, z * 0.9)); }
+    g.globalAlpha = 1;
   }
   for (const f of show.forsale ? v.vacant : []) {
     const { x, y } = px(f.idx); if (x < -z || y < -z || x > W || y > H) continue;
     g.setLineDash([3, 2]); g.strokeStyle = '#d4a017'; g.lineWidth = Math.max(2, z * 0.12); g.strokeRect(x + 0.5, y + 0.5, Math.max(5, z) - 1, Math.max(5, z) - 1); g.setLineDash([]);
     if (z >= 8) { g.fillStyle = BUILDINGS[f.type].color; g.globalAlpha = 0.6; g.fillRect(x + z * 0.2, y + z * 0.2, z * 0.6, z * 0.6); g.globalAlpha = 1; }
-    if (z >= 12) { g.fillStyle = '#7a5a00'; g.font = `bold ${Math.round(z * 0.4)}px system-ui`; g.fillText('SALE', x + z / 2, y + z / 2 + 1); }
+    if (z >= 12) { g.fillStyle = '#7a5a00'; g.font = `bold ${Math.round(z * 0.4)}px system-ui`; g.fillText(tr('SALE'), x + z / 2, y + z / 2 + 1); }
   }
   // ---- city labels
   g.textBaseline = 'alphabetic'; g.lineJoin = 'round';
@@ -308,5 +325,31 @@ function drawMain(cv: HTMLCanvasElement, hoverIdx: number) {
   }
   // ---- hover / selection
   const mark = (i: number, col: string, lw: number) => { if (i < 0 || z < 6) return; const { x, y } = px(i); g.strokeStyle = col; g.lineWidth = lw; g.strokeRect(x + 1, y + 1, z - 2, z - 2); };
+  // the 5x5 area of effect of the selected tile / building
+  const selIdx = S.sel ?? (S.buildingId ? v.buildings.find(b => b.id === S.buildingId)?.idx : undefined);
+  const selB = selIdx != null ? [...v.buildings, ...v.others].find(b => b.idx === selIdx && b.type !== 'mall') : undefined;
+  if (selIdx != null && z >= 6 && (selB || terrainAt({ world: wd }, selIdx) !== 'd' && terrainAt({ world: wd }, selIdx) !== 'a')) {
+    const x0 = selIdx % wd.w - AREA_R, y0 = Math.floor(selIdx / wd.w) - AREA_R, n = AREA_R * 2 + 1, ax = (x0 - cam.x) * z, ay = (y0 - cam.y) * z;
+    g.fillStyle = selB ? 'rgba(255,212,0,.10)' : 'rgba(255,255,255,.08)'; g.fillRect(ax, ay, n * z, n * z); g.setLineDash([6, 4]); g.strokeStyle = selB ? 'rgba(255,212,0,.95)' : 'rgba(255,255,255,.85)'; g.lineWidth = 2; g.strokeRect(ax, ay, n * z, n * z); g.setLineDash([]);
+  }
+  // transport routes from every chosen source to the selected facility
+  const rb = S.showRoutes ? (v.buildings.find(b => b.id === S.buildingId) ?? (S.sel != null ? v.buildings.find(b => b.idx === S.sel) : undefined)) : undefined;
+  if (rb && rb.type !== 'mall') {
+    const ctx = { cities: v.cities, world: wd }, srcs = new Set<string>();
+    Object.values(rb.sources ?? {}).forEach(x => x && srcs.add(x)); rb.slots?.forEach(sl => sl.source && srcs.add(sl.source)); rb.layout?.forEach(c => { if (c.m === 'import' && c.source) srcs.add(c.source); });
+    const PAL = ['#ff3b30', '#0a84ff', '#ff9f0a', '#bf5af2', '#30d158', '#ff375f'], C = (i: number) => ({ x: ((i % wd.w) + 0.5 - cam.x) * z, y: (Math.floor(i / wd.w) + 0.5 - cam.y) * z });
+    let k = 0; g.lineJoin = 'round'; g.lineCap = 'round';
+    for (const src of srcs) {
+      let from = -1, label = ''; if (src.startsWith('harbour:')) { const c = v.cities[+src.slice(8)]; if (c) { from = cityTile({ world: wd }, c); label = '⚓ ' + c.name; } }
+      else { const o = [...v.buildings, ...v.others].find(o => o.id === src.split('#')[0]); if (o) { from = o.idx; label = o.name; } }
+      if (from < 0 || from === rb.idx) continue;
+      const col = PAL[k++ % PAL.length], path = haulRoute(ctx, from, rb.idx), pts = (path.length ? path : [from, rb.idx]).map(C);
+      for (const [w, c] of [[Math.max(5, z * 0.5), 'rgba(255,255,255,.9)'], [Math.max(3, z * 0.3), col]] as [number, string][]) { g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)); g.lineWidth = w; g.strokeStyle = c; g.setLineDash(path.length ? [] : [8, 6]); g.stroke(); }
+      g.setLineDash([]); const o = pts[0], d = pts[pts.length - 1];
+      g.beginPath(); g.arc(o.x, o.y, Math.max(4, z * 0.35), 0, Math.PI * 2); g.fillStyle = col; g.fill(); g.lineWidth = 2; g.strokeStyle = '#fff'; g.stroke();
+      g.beginPath(); g.arc(d.x, d.y, Math.max(3, z * 0.25), 0, Math.PI * 2); g.fillStyle = '#fff'; g.fill(); g.strokeStyle = col; g.stroke();
+      const txt = label + ' → ' + num(haulPath(ctx, from, rb.idx)); g.font = 'bold 12px system-ui'; g.textAlign = 'left'; g.textBaseline = 'middle'; g.lineWidth = 4; g.strokeStyle = 'rgba(0,0,0,.8)'; g.strokeText(txt, o.x + 9, o.y - 10); g.fillStyle = '#fff'; g.fillText(txt, o.x + 9, o.y - 10);
+    }
+  }
   mark(hoverIdx, 'rgba(255,255,255,.95)', 2); mark(S.sel ?? -1, '#ffd400', 3);
 }

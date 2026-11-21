@@ -5,7 +5,7 @@ import { toast } from './util.js';
 export const S = {
   gameId: '', token: '', view: null as View | null,
   tab: 'map' as string, cfgTab: 'Production',
-  city: 0, sel: null as number | null, buildingId: null as string | null,
+  city: 0, costField: null as string | null, showRoutes: true, sel: null as number | null, buildingId: null as string | null,
   world: null as null | { id: string; w: number; h: number; tiles: string; rails: { a: number; b: number; tiles: number[] }[]; img: HTMLCanvasElement; res: number[] },
   offset: 0, render: (() => {}) as () => void,
 };

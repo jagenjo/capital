@@ -1,8 +1,9 @@
 // "Supply chain" tab: every production line, farm, mine and shop of yours as a node, with a link wherever a good flows from a source to a user.
+import { tr } from './i18n.js';
 import { PRODUCTS, BUILDINGS, type ProductId } from '../../shared/data.js';
 import { adj8, isLinked } from '../../shared/engine.js';
 import type { Building } from '../../shared/types.js';
-import { h, num } from './util.js';
+import { h, num, crisp } from './util.js';
 import { S, companyOf } from './state.js';
 import { focusTile } from './worldmap.js';
 
@@ -68,7 +69,7 @@ export function chainScreen(): HTMLElement {
   const v = S.view!;
   if (!v.buildings.length) return h('div', { class: 'panel' }, 'You have no buildings yet. Build something on the Map tab and its supply chain shows up here.');
   const gr = graph(); const W = Math.max(600, gr.w), H = Math.max(240, gr.h);
-  const cv = h('canvas', { width: W, height: H, style: 'display:block;background:#efece0;cursor:pointer' });
+  const cv = crisp(h('canvas', { style: 'display:block;background:#efece0;cursor:pointer' }), W, H);
   const g = cv.getContext('2d')!; let hov = '';
   const draw = () => {
     g.clearRect(0, 0, W, H); g.fillStyle = '#efece0'; g.fillRect(0, 0, W, H);
@@ -89,7 +90,7 @@ export function chainScreen(): HTMLElement {
       g.textAlign = 'left'; g.textBaseline = 'alphabetic'; g.fillStyle = '#222'; g.font = 'bold 12px system-ui'; g.fillText(n.label, n.x + 14, n.y + 17, NW - 20);
       g.fillStyle = '#666'; g.font = '10px system-ui'; g.fillText(n.sub, n.x + 14, n.y + 30, NW - 20);
       if (n.b && n.kind !== 'store' && n.kind !== 'harbour') { const fin = n.kind === 'bld' || n.product === n.b.product; if (fin) { g.fillStyle = '#444'; g.fillText('stock ' + num(n.b.stock.qty), n.x + 14, n.y + 42, NW - 20); } }
-      if (n.missing.length) { g.fillStyle = '#b3261e'; g.font = 'bold 10px system-ui'; g.fillText('⚠ no ' + n.missing.join(', '), n.x + 14, n.y + 54, NW - 20); }
+      if (n.missing.length) { g.fillStyle = '#b3261e'; g.font = 'bold 10px system-ui'; g.fillText(tr('⚠ no ') + n.missing.map(tr).join(', '), n.x + 14, n.y + 54, NW - 20); }
       g.globalAlpha = 1;
     }
   };

@@ -1,7 +1,7 @@
 // Game engine: pure functions over GameState. One call to processTurn() = one month.
 import {
   PRODUCTS, PRODUCT_LIST, BUILDINGS, LENDERS, type Lender, TERRAIN_INFO, MAX_LINES, MAX_AUTO, MAX_STORE_SIZE, STORE_SLOTS, BASE_WAGE,
-  MALL_UNITS, MALL_MIN_BRAND, MALL_FITOUT, MALL_TRAFFIC, MALL_BRAND_BOOST, MALL_LEASE, MALL_PER_CITY, IMPORT_MARKUP, IMPORT_QUALITY, NPC_SHARE_MARKUP, MONTH_NAMES, COMPANY_COLORS, MODULES, FAC_GRID, WORLD_SCALE, WORLD_W, OVERSTAFF_CAP, OVERSTAFF_BONUS,
+  BUILD_TURNS, MEDIA, MEDIA_TERMS, MEDIA_DISCOUNT, MEDIA_CANCEL_MONTHS, MALL_UNITS, MALL_MIN_BRAND, MALL_FITOUT, MALL_TRAFFIC, MALL_BRAND_BOOST, MALL_LEASE, MALL_PER_CITY, IMPORT_MARKUP, IMPORT_QUALITY, NPC_SHARE_MARKUP, MONTH_NAMES, COMPANY_COLORS, MODULES, FAC_GRID, WORLD_SCALE, WORLD_W, OVERSTAFF_CAP, OVERSTAFF_BONUS,
   type ModuleType,
   type ProductId, type BuildingType, type Terrain,
 } from './data.js';
@@ -49,9 +49,17 @@ export function createGame(settings: Settings): GameState {
     const pop = Math.round(rr(s, 6000, 55000) / 500) * 500;
     s.cities.push({ id: settings.cityCount + i, name: tnames[i % tnames.length], x: 0, y: 0, pop, wealth: round2(rr(s, 0.7, 1.25)), wageIdx: round2(rr(s, 0.8, 1.15)), priceIdx: round2(rr(s, 0.85, 1.2)), radius: 2, town: true });
   }
+  { const m = s.cities[0]; m.pop = Math.round(rr(s, 1_400_000, 2_100_000) / 1000) * 1000; m.wealth = round2(rr(s, 1.2, 1.4)); } // the metropolis: sized before the map is drawn
   buildWorld(s);
   refreshHarbours(s);
   refreshCandidates(s, true);
+  { // every map has one big city (city 0) with a harbour and a ready-built shopping mall for sale
+    const m = s.cities[0];
+    const near = [...(s.world?.tiles ?? '')].map((ch, i) => ch === 'u' && nearestCity(s.cities, i) === 0 ? i : -1).filter(i => i >= 0);
+    if (near.length) { const idx = near[Math.floor(rnd(s) * near.length)]; const def = BUILDINGS.mall;
+      (s.vacant ??= []).push({ id: 'v' + s.nextId++, type: 'mall', city: 0, idx, product: null, cond: 100, land: lotPrice(s, idx), build: Math.round(def.cost * 0.85 / 100) * 100, listedTurn: 0, origin: 'estate', perm: true });
+      s.news.push({ turn: 0, kind: 'info', tag: 'vacant', text: `${m.name}, the largest city in the land, has a ready-built shopping mall on the market.` }); }
+  }
   for (let i = 0; i < 6; i++) spawnVacancy(s, true);
   for (let i = 0; i < 4; i++) spawnSubsidy(s, true);
   for (const p of PRODUCT_LIST) s.market[p.id] = { idx: 1, demand: 1 };
@@ -67,7 +75,7 @@ export function addCompany(s: GameState, o: { name: string; isAI?: boolean; play
   const c: Company = {
     id: 'c' + s.nextId++, name: o.name, color: o.color ?? COMPANY_COLORS.find(x => !used.has(x)) ?? '#888',
     portrait: o.portrait ?? Math.floor(rnd(s) * 72), isAI: !!o.isAI, playerId: o.playerId,
-    cash: s.settings.startCash, debt: 0, tech, brand, ads: {}, ledger: emptyLedger(), history: [], ready: !!o.isAI,
+    cash: s.settings.startCash, debt: 0, tech, brand, ledger: emptyLedger(), history: [], ready: !!o.isAI,
     bankrupt: false, negMonths: 0, lossCarry: 0, news: [], loans: [],
   };
   if (c.isAI) { const cons = PRODUCT_LIST.filter(p => p.kind === 'consumer' && p.depth <= 1 && !p.research); c.aiFocus = cons[Math.floor(rnd(s) * cons.length)].id; c.cash = Math.round(c.cash * 1.5); }
@@ -111,7 +119,6 @@ export const worldPrice = (s: GameState, p: ProductId) => round2(PRODUCTS[p].bas
 export const worldVolume = (p: ProductId) => PRODUCTS[p].cap * WORLD_VOL;
 export const importPrice = (s: GameState, p: ProductId) => round2(PRODUCTS[p].basePrice * s.market[p].idx * IMPORT_MARKUP);
 export const dist = (s: GameState, a: number, b: number) => s.dist ? s.dist[a][b] : a === b ? 15 : Math.hypot(s.cities[a].x - s.cities[b].x, s.cities[a].y - s.cities[b].y);
-export const transportPerUnit = (s: GameState, p: ProductId, a: number, b: number) => PRODUCTS[p].basePrice * 0.0002 * dist(s, a, b);
 
 // ---- railways: buildings within RAIL_REACH tiles of a track are on that rail network; shipping between two buildings of the same network is cheaper and bigger
 export const RAIL_REACH = 3, RAIL_COST_MUL = 0.5, RAIL_SHIP_MUL = 2.5, SHIP_BASE = 1.2;
@@ -127,6 +134,58 @@ export function railMap(s: { world?: { w: number; h: number; rails?: { a: number
     for (let dy = -RAIL_REACH; dy <= RAIL_REACH; dy++) for (let dx = -RAIL_REACH; dx <= RAIL_REACH; dx++) { const x = tx + dx, y = ty + dy; if (x >= 0 && y >= 0 && x < w.w && y < w.h && m.comp[y * w.w + x] < 0) m.comp[y * w.w + x] = c; } } }
   railCache.set(w, m); return m;
 }
+// ---- hauling: goods travel tile by tile. Entering a rail tile costs 1, a road / street / port tile 10, any other land tile 100 (sea is impassable).
+export const HAUL_RAIL = 1, HAUL_ROAD = 10, HAUL_OFF = 100, HAUL_K = 0.00005; // HAUL_K: share of a product's base price per point of path cost
+const NO_PATH = 65535;
+const fieldCache = new WeakMap<object, Map<number, Uint16Array>>();
+function haulStep(w: { tiles: string }, rm: ReturnType<typeof railMap>, i: number): number {
+  if (rm?.on[i]) return HAUL_RAIL; const t = w.tiles[i];
+  if (t === 'd' || t === 'a') return 0; return t === 'r' || t === 'u' || t === 's' || t === 'p' ? HAUL_ROAD : HAUL_OFF;
+}
+/** Cheapest haul cost from `origin` to every tile (Dial's bucket search; 65535 = cannot be reached over land). */
+export function costField(s: TileCtx, origin: number): Uint16Array {
+  const w = s.world!; let cache = fieldCache.get(w); if (!cache) fieldCache.set(w, cache = new Map());
+  const hit = cache.get(origin); if (hit) return hit;
+  const n = w.w * w.h, rm = railMap(s), d = new Uint16Array(n).fill(NO_PATH); d[origin] = 0;
+  const B = HAUL_OFF + 1, buckets: number[][] = Array.from({ length: B }, () => []); buckets[0].push(origin);
+  let pending = 1;
+  for (let cur = 0; pending > 0 && cur < NO_PATH; cur++) {
+    const bk = buckets[cur % B];
+    while (bk.length) {
+      const u = bk.pop()!; pending--; if (d[u] !== cur) continue;
+      const x = u % w.w, y = (u / w.w) | 0;
+      for (let k = 0; k < 4; k++) {
+        const nx = x + (k === 0 ? 1 : k === 1 ? -1 : 0), ny = y + (k === 2 ? 1 : k === 3 ? -1 : 0); if (nx < 0 || ny < 0 || nx >= w.w || ny >= w.h) continue;
+        const v = ny * w.w + nx, st = haulStep(w, rm, v); if (!st) continue; const nd = cur + st;
+        if (nd < d[v] && nd < NO_PATH) { d[v] = nd; buckets[nd % B].push(v); pending++; }
+      }
+    }
+  }
+  if (cache.size >= 60) cache.delete(cache.keys().next().value!);
+  cache.set(origin, d); return d;
+}
+/** Path cost between two tiles; places the land route cannot join (islands) fall back to a straight line at the off-road rate plus a ferry surcharge. */
+export function haulPath(s: TileCtx, from: number, to: number): number {
+  const c = costField(s, from)[to]; if (c !== NO_PATH) return c;
+  const w = s.world!; return Math.round(Math.hypot((from % w.w) - (to % w.w), ((from / w.w) | 0) - ((to / w.w) | 0)) * HAUL_OFF * 1.5);
+}
+/** The cheapest tile route from `from` to `to` (both included), or [] when the land route does not exist. */
+export function haulRoute(s: TileCtx, from: number, to: number): number[] {
+  const w = s.world!, d = costField(s, from); if (d[to] === NO_PATH) return [];
+  const rm = railMap(s); const out = [to]; let u = to, guard = w.w * w.h;
+  while (u !== from && guard-- > 0) {
+    const x = u % w.w, y = (u / w.w) | 0, st = haulStep(w, rm, u); let next = -1;
+    for (let k = 0; k < 4 && next < 0; k++) {
+      const nx = x + (k === 0 ? 1 : k === 1 ? -1 : 0), ny = y + (k === 2 ? 1 : k === 3 ? -1 : 0); if (nx < 0 || ny < 0 || nx >= w.w || ny >= w.h) continue;
+      const v = ny * w.w + nx; if (d[v] !== NO_PATH && d[v] + st === d[u]) next = v;
+    }
+    if (next < 0) break; out.push(next); u = next;
+  }
+  return out.reverse();
+}
+/** Transport cost per unit of a product between two tiles. */
+export const haulCost = (s: TileCtx, p: ProductId, from: number, to: number) => PRODUCTS[p].basePrice * HAUL_K * haulPath(s, from, to);
+
 // ---- per-tile figures: population, transport availability (0-100), build price
 type TileCtx = { cities: City[]; world?: { w: number; h: number; tiles: string; rails?: { a: number; b: number; tiles: number[] }[] } };
 const URBAN_W: Record<string, number> = { u: 3, s: 1 }, RURAL_POP: Record<string, number> = { f: 40, g: 12, t: 5, b: 8 };
@@ -141,6 +200,27 @@ export function tilePop(s: TileCtx, idx: number): number {
   const t = terrainAt(s, idx), k = URBAN_W[t];
   if (!k) return RURAL_POP[t] ?? 0;
   const c = nearestCity(s.cities, idx); return Math.round(s.cities[c].pop * k / Math.max(1, urbanSums(s)[c]));
+}
+// ---- area of effect: every building feels the 5x5 tiles around it
+export const AREA_R = 2;
+export type AreaKind = 'pop' | 'deposits' | 'trees' | 'farmland';
+export interface AreaInfo { kind: AreaKind; pop: number; count: number; max: number; factor: number }
+const AREA_TERRAIN: Record<string, [AreaKind, string, number]> = { mine: ['deposits', 'e', 10], oil: ['deposits', 'o', 10], forest: ['trees', 't', 25], farm: ['farmland', 'f', 25] };
+const areaCache = new WeakMap<object, Map<string, AreaInfo>>();
+/** Output multiplier from the surroundings: factories, shops and labs like population nearby (log scale, 0.6x-1.5x);
+ *  mines, oil wells, logging camps and farms like deposits / trees / farmland in the 5x5 square (0.5x-1.5x). */
+export function areaInfo(s: TileCtx, b: { type: string; idx: number }): AreaInfo {
+  const w = s.world!; let m = areaCache.get(w); if (!m) areaCache.set(w, m = new Map());
+  const key = b.type + ':' + b.idx; const spec = AREA_TERRAIN[b.type]; const hit = spec ? m.get(key) : undefined; if (hit) return hit; // terrain never changes, population does
+  const x0 = b.idx % w.w, y0 = Math.floor(b.idx / w.w);
+  let pop = 0, count = 0;
+  for (let dy = -AREA_R; dy <= AREA_R; dy++) for (let dx = -AREA_R; dx <= AREA_R; dx++) {
+    const x = x0 + dx, y = y0 + dy; if (x < 0 || y < 0 || x >= w.w || y >= w.h) continue;
+    const i = y * w.w + x; if (spec) { if (w.tiles[i] === spec[1]) count++; } else pop += tilePop(s, i);
+  }
+  const info: AreaInfo = spec ? { kind: spec[0], pop: 0, count, max: spec[2], factor: 0.5 + Math.min(1, count / spec[2]) }
+    : { kind: 'pop', pop, count: 0, max: 0, factor: b.type === 'mall' ? 1 : clamp(0.6 + 0.28 * Math.log10(1 + pop / 2000), 0.6, 1.5) };
+  if (spec) m.set(key, info); return info;
 }
 const trCache = new WeakMap<object, Uint8Array>();
 /** 0-100: how easily goods can reach a tile — roads, city streets, docks and (a bonus) railways within a few tiles. */
@@ -317,7 +397,7 @@ export function slotCapacity(b: Building, p: ProductId): number { return Math.ro
 function moraleFactor(s: GameState, b: Building) { return clamp(0.55 + 0.45 * (b.wage / cityWage(s, b.city)), 0.55, 1.08); }
 export function efficiency(s: GameState, b: Building): number {
   const staff = b.type === 'factory' && b.layout ? 1 : staffFactor(b.workers, requiredWorkers(b));
-  return staff * moraleFactor(s, b) * (0.6 + 0.4 * b.condition / 100) * (1 + mgrBonus(s, b).eff);
+  return staff * moraleFactor(s, b) * (0.6 + 0.4 * b.condition / 100) * (1 + mgrBonus(s, b).eff) * areaInfo(s, b).factor;
 }
 function seasonFactor(s: GameState, b: Building): number {
   let f = 1;
@@ -446,9 +526,9 @@ export function applyAction(s: GameState, cid: string, a: Action): Res {
       const b = newBuilding(s, c, a.btype, cityId, a.idx, product);
       if (a.btype === 'store') b.slots[0].product = null;
       s.buildings[b.id] = b;
-      s.news.push({ turn: s.turn, kind: 'info', tag: 'opening', text: `${c.name} opens ${/^[aeiou]/i.test(def.name) ? 'an' : 'a'} ${def.name.toLowerCase()}${product && a.btype !== 'store' ? ' for ' + PRODUCTS[product].name.toLowerCase() : ''} in ${s.cities[cityId].name}.` });
+      b.building = BUILD_TURNS[a.btype];
+      if (a.btype === 'mall') s.news.push({ turn: s.turn, kind: 'info', tag: 'announce', text: `${c.name} announces a shopping mall in ${s.cities[cityId].name}, opening in ${b.building} months. Units can be rented from now on.` });
       if (sub) claimSubsidy(s, c, sub, grant);
-      fillStaff(s, cid, b);
       return { ok: true, info: b.id };
     }
     case 'sellBuilding': {
@@ -608,7 +688,23 @@ export function applyAction(s: GameState, cid: string, a: Action): Res {
       sl.product = a.product; sl.price = round2(num(a.price, 0.01, 1e8)); sl.order = Math.round(num(a.order, 0, 100000)); sl.source = a.source;
       return OK;
     }
-    case 'setAds': { c.ads[a.product] = Math.round(num(a.budget, 0, 1_000_000)); return OK; }
+    case 'adContract': {
+      const m = MEDIA.find(x => x.id === a.media); if (!m) return err('Unknown media outlet');
+      if (PRODUCTS[a.product]?.kind !== 'consumer') return err('Only consumer goods can be advertised');
+      if (!MEDIA_TERMS.includes(a.months)) return err('Choose one of the offered terms');
+      const list = (s.adContracts ??= []);
+      if (list.filter(x => x.media === m.id).length >= m.slots) return err(m.name + ' has no free advertising slots');
+      if (list.some(x => x.media === m.id && x.owner === cid && x.product === a.product)) return err('You already advertise that product with ' + m.name);
+      const fee = Math.round(m.fee * (1 - (MEDIA_DISCOUNT[a.months] ?? 0)));
+      if (c.cash < fee) return err('Not enough cash (need ' + fmtMoney(fee) + ')');
+      list.push({ id: 'ad' + (s.nextId++), owner: cid, media: m.id, product: a.product, fee, start: s.turn, end: s.turn + a.months });
+      return { ok: true, info: `Contract signed with ${m.name}: ${PRODUCTS[a.product].name} for ${a.months} months at ${fmtMoney(fee)} a month` };
+    }
+    case 'cancelAd': {
+      const list = s.adContracts ?? []; const i = list.findIndex(x => x.id === a.id && x.owner === cid); if (i < 0) return err('No such contract');
+      const x = list[i]; const pen = x.fee * MEDIA_CANCEL_MONTHS; if (c.cash < pen) return err('Not enough cash (need ' + fmtMoney(pen) + ')');
+      c.cash -= pen; c.ledger.ads += pen; list.splice(i, 1); return { ok: true, info: `Contract cancelled: penalty ${fmtMoney(pen)}` };
+    }
     case 'rename': { const b = own(a.id); if (!b) return err('Not your building'); b.name = String(a.name).slice(0, 40) || b.name; return OK; }
     case 'buyShares': case 'sellShares': {
       const t = s.companies.find(x => x.id === a.company); if (!t || t.bankrupt) return err('No such listed company'); if (t.id === c.id) return err('Use issue / buy back for your own shares');
@@ -657,18 +753,33 @@ export function applyAction(s: GameState, cid: string, a: Action): Res {
       if (units.some(x => x.owner === cid && x.slots[0]?.product === a.product)) return err('You already sell ' + p.name.toLowerCase() + ' in this mall');
       if (!canPay(MALL_FITOUT)) return err('Need ' + fmtMoney(MALL_FITOUT) + ' for the shop fit-out');
       pay(MALL_FITOUT);
-      const u = newBuilding(s, c, 'store', m.city, m.idx, null); u.mall = m.id; u.rent = m.owner === cid ? 0 : m.rent ?? 10000; u.leaseEnd = s.turn + MALL_LEASE; u.invested = MALL_FITOUT; u.size = 1; u.slots.length = 1;
+      const u = newBuilding(s, c, 'store', m.city, m.idx, null); u.mall = m.id; u.rent = m.owner === cid ? 0 : m.rent ?? 10000; u.leaseEnd = s.turn + (m.building ?? 0) + MALL_LEASE; u.invested = MALL_FITOUT; u.size = 1; u.slots.length = 1;
       u.name = `${p.name} shop · ${m.name}`; u.slots[0] = { ...u.slots[0], product: a.product, price: round2(retailRef(s, m.city, a.product)), order: 0, source: '' };
-      s.buildings[u.id] = u; fillStaff(s, cid, u);
-      if (m.owner !== cid) s.news.push({ turn: s.turn, kind: 'info', tag: 'opening', text: `${c.name} rents a unit in ${m.name} (${s.cities[m.city].name}) to sell ${p.name.toLowerCase()}.` });
+      s.buildings[u.id] = u; if (!m.building) fillStaff(s, cid, u);
+      if (m.owner !== cid) s.news.push({ turn: s.turn, kind: 'info', tag: 'opening', text: `${c.name} ${m.building ? 'reserves' : 'rents'} a unit in ${m.name} (${s.cities[m.city].name}) to sell ${p.name.toLowerCase()}.` });
       return { ok: true, info: u.id };
     }
-    case 'hire': {
-      const pool = (s.candidates ??= []); const i = pool.findIndex(x => x.id === a.id); if (i < 0) return err('That candidate is no longer available');
-      const p = pool[i]; const staff = (c.staff ??= []); const n = staff.filter(x => x.kind === p.kind).length;
-      if (n >= MAX_STAFF[p.kind]) return err('You can employ at most ' + MAX_STAFF[p.kind] + (p.kind === 'manager' ? ' managers' : ' advisor') + '. Fire someone first.');
-      if (c.cash < p.salary * 2) return err('Keep at least two months of salary in cash to hire ' + p.name);
-      pool.splice(i, 1); p.hiredTurn = s.turn; p.assigned = null; staff.push(p); return OK;
+    case 'sendMessage': {
+      const to = s.companies.find(x => x.id === a.to); if (!to || to.id === cid) return err('Choose another company to write to');
+      const text = String(a.text ?? '').trim().slice(0, 600); if (!text) return err('The message is empty');
+      const ms = (s.messages ??= []); if (ms.filter(m => m.from === cid && m.turn === s.turn).length >= 20) return err('You have sent too many messages this month');
+      ms.push({ id: s.nextId++, from: cid, to: to.id, turn: s.turn, text }); if (ms.length > 500) ms.splice(0, ms.length - 500); return OK;
+    }
+    case 'readMessages': { for (const m of s.messages ?? []) if (m.to === cid && m.from === a.from) m.seen = true; return OK; }
+    case 'bid': {
+      const tg = bidTarget(s, a.id); if (!tg) return err('That person is no longer available');
+      const p = tg.p; const sal = Math.round(num(a.salary, 0, 1e7) / 50) * 50;
+      if (tg.employer) { // a contract about to end: the employer may counter-offer, rivals may poach
+        const left = (p.contractEnd ?? 0) - s.turn; if (left > OFFER_WINDOW) return err(`${p.name}'s contract has ${left} months to run: offers open ${OFFER_WINDOW} months before it ends`);
+        if (tg.employer.id === cid) { if (sal < p.salary) return err('A renewal cannot be below the current salary'); }
+        else if (sal <= p.salary) return err(`To win ${p.name} over, offer more than the current ${fmtMoney(p.salary)} a month`);
+      } else if (sal < p.salary) return err(p.name + ' will not work for less than ' + fmtMoney(p.salary) + ' a month');
+      if (!(tg.employer?.id === cid)) { const staff = c.staff ?? []; if (staff.filter(x => x.kind === p.kind).length >= MAX_STAFF[p.kind]) return err('You already employ the maximum number of ' + (p.kind === 'manager' ? 'managers (' + MAX_STAFF.manager + ')' : 'advisors (' + MAX_STAFF.advisor + ')') + '. Fire someone first.'); }
+      if (c.cash < sal * 2) return err('Keep at least two months of the offered salary in cash');
+      p.bids = (p.bids ?? []).filter(x => x.company !== cid); p.bids.push({ company: cid, salary: sal }); return OK;
+    }
+    case 'withdrawBid': {
+      const tg = bidTarget(s, a.id); if (!tg) return err('That person is no longer available'); tg.p.bids = (tg.p.bids ?? []).filter(x => x.company !== cid); return OK;
     }
     case 'fire': {
       const staff = c.staff ?? []; const i = staff.findIndex(x => x.id === a.id); if (i < 0) return err('No such employee');
@@ -759,8 +870,8 @@ function acquire(s: GameState, buyer: Building, product: ProductId, qty: number,
   if (source.startsWith('harbour:')) {
     const hc = s.cities[+source.slice(8)]; const gd = harbourStocks(s.cities, source, product); if (!hc || !gd) return { qty: 0, q: 0 };
     const price = harbourGoodPrice(s, gd);
-    rail = railLink(s, cityTile(s, hc), bt); const trMul = rail ? RAIL_COST_MUL : 1;
-    cd = { good: gd, price, landed: price + transportPerUnit(s, product, hc.id, buyer.city) * trMul, avail: gd.qty, q: IMPORT_QUALITY, internal: false };
+    rail = railLink(s, cityTile(s, hc), bt);
+    cd = { good: gd, price, landed: price + haulCost(s, product, cityTile(s, hc), bt), avail: gd.qty, q: IMPORT_QUALITY, internal: false };
   } else {
     const [bid, ci] = source.split('#'); const b = s.buildings[bid]; const ec = ci !== undefined ? b?.layout?.[+ci] : undefined;
     if (!b || b.id === buyer.id) return { qty: 0, q: 0 };
@@ -768,9 +879,9 @@ function acquire(s: GameState, buyer: Building, product: ProductId, qty: number,
     else if (b.product !== product || b.stock.qty < 0.5) return { qty: 0, q: 0 };
     const internal = b.owner === buyer.owner; const lp = ec ? ec.listPrice : b.listPrice; if (!internal && lp == null) return { qty: 0, q: 0 };
     const price = internal ? 0 : lp!; const stk = ec ? ec.stock! : b.stock;
-    rail = railLink(s, b.idx, bt); const trMul = rail ? RAIL_COST_MUL : 1;
+    rail = railLink(s, b.idx, bt);
     const ship = b.city === buyer.city ? Infinity : Math.max(capacity(b), ec ? exportCap(b, +ci) : 0) * (rail ? RAIL_SHIP_MUL : SHIP_BASE) - (b.shipped ?? 0);
-    cd = { b, cell: ec, price, landed: price + transportPerUnit(s, product, b.city, buyer.city) * trMul, avail: Math.min(stk.qty, Math.max(0, ship)), q: stk.q, internal };
+    cd = { b, cell: ec, price, landed: price + haulCost(s, product, b.idx, bt), avail: Math.min(stk.qty, Math.max(0, ship)), q: stk.q, internal };
   }
   let n = Math.min(qty, cd.avail);
   if (cd.landed > 0) n = Math.min(n, Math.max(0, (company.cash + limit) / cd.landed));
@@ -799,29 +910,34 @@ export function processTurn(s: GameState) {
   if (!s.world) buildWorld(s);
   for (const b of Object.values(s.buildings)) { b.report = emptyReport(); ensureLayout(b); syncLayout(b); }
 
+  for (const b of Object.values(s.buildings)) if (b.building) { b.building--; if (!b.building) { b.building = undefined; completeBuilding(s, b); } }
   updateMarket(s);
   refreshHarbours(s);
+  for (const x of (s.adContracts ?? []).filter(x => x.end <= s.turn)) { const o = s.companies.find(c => c.id === x.owner); o?.news.push({ turn: s.turn, text: `Your ${MEDIA.find(m => m.id === x.media)?.name ?? 'media'} contract for ${PRODUCTS[x.product].name} has ended.` }); }
+  if (s.adContracts) s.adContracts = s.adContracts.filter(x => x.end > s.turn && !s.companies.find(c => c.id === x.owner)?.bankrupt);
+  resolveHiring(s);
+  resolveContracts(s);
   refreshCandidates(s);
   spawnVacancies(s);
   spawnSubsidies(s);
   for (const c of live) if (c.isAI) aiTurn(s, c);
 
   // production tiers: raw first, then deeper recipes
-  const producers = Object.values(s.buildings).filter(b => b.product && b.type !== 'store' && b.type !== 'rd' && !s.companies.find(c => c.id === b.owner)!.bankrupt);
+  const producers = Object.values(s.buildings).filter(b => !idle(s, b) && b.product && b.type !== 'store' && b.type !== 'rd' && !s.companies.find(c => c.id === b.owner)!.bankrupt);
   shuffle(s, producers).sort((a, b) => PRODUCTS[a.product!].depth - PRODUCTS[b.product!].depth);
   for (const b of producers) produce(s, b);
 
   // stores buy
-  for (const b of shuffle(s, Object.values(s.buildings).filter(b => b.type === 'store'))) storeBuy(s, b);
+  for (const b of shuffle(s, Object.values(s.buildings).filter(b => b.type === 'store' && !idle(s, b)))) storeBuy(s, b);
 
   // retail
   retail(s);
   sellWorld(s);
 
   // R&D
-  for (const b of Object.values(s.buildings)) if (b.type === 'rd' && b.product) {
+  for (const b of Object.values(s.buildings)) if (b.type === 'rd' && b.product && !idle(s, b)) {
     const c = s.companies.find(x => x.id === b.owner)!;
-    const pts = b.workers * 0.15 * moraleFactor(s, b) * (0.6 + 0.4 * b.condition / 100);
+    const pts = b.workers * 0.15 * moraleFactor(s, b) * (0.6 + 0.4 * b.condition / 100) * areaInfo(s, b).factor;
     const P = PRODUCTS[b.product];
     if (P.research && !isUnlocked(c, b.product)) { // a hi-tech project: points go into unlocking the product instead of its tech level
       if (!canResearch(c, b.product)) { b.report.produced = 0; b.report.note = `${P.name} cannot be researched until ${PRODUCTS[P.after!].name} is unlocked.`; continue; }
@@ -1071,8 +1187,7 @@ function storeBuy(s: GameState, b: Building) {
 function retail(s: GameState) {
   const season = (p: ProductId) => p === 'fuel' ? 1 + 0.1 * Math.sin((s.turn % 12) / 12 * 2 * Math.PI) : 1;
   for (const city of s.cities) {
-    const stores = Object.values(s.buildings).filter(b => b.type === 'store' && b.city === city.id && !s.companies.find(c => c.id === b.owner)!.bankrupt);
-    const terr = (idx: number) => ({ u: 1.25, s: 1.0 } as Record<string, number>)[terrainAt(s, idx)] ?? 0.7;
+    const stores = Object.values(s.buildings).filter(b => b.type === 'store' && !idle(s, b) && b.city === city.id && !s.companies.find(c => c.id === b.owner)!.bankrupt);
     for (const p of PRODUCT_LIST) {
       if (p.kind !== 'consumer') continue;
       const refP = retailRef(s, city.id, p.id);
@@ -1088,7 +1203,7 @@ function retail(s: GameState) {
         if (sl.stock.qty < 0.5 || sl.price <= 0) continue;
         const brand = c.brand[p.id];
         const mallB = b.mall ? MALL_TRAFFIC * (0.8 + 0.2 * (s.buildings[b.mall]?.condition ?? 100) / 100) : 1;
-        const attr = Math.pow(refP / sl.price, 2.2) * Math.pow(0.4 + sl.stock.q / 80, 1.3) * (1 + brand / (b.mall ? 60 / MALL_BRAND_BOOST : 60)) * terr(b.idx) * mallB * (0.5 + 0.5 * staffEff);
+        const attr = Math.pow(refP / sl.price, 2.2) * Math.pow(0.4 + sl.stock.q / 80, 1.3) * (1 + brand / (b.mall ? 60 / MALL_BRAND_BOOST : 60)) * areaInfo(s, b).factor * mallB * (0.5 + 0.5 * staffEff);
         es.push({ sl, b, price: sl.price, attr, cap: Math.min(sl.stock.qty, slotCapacity(b, p.id) * Math.max(0.1, staffEff) * 1.3), sold: 0 });
       }
       const npc: E = { price: refP * NPC_SHARE_MARKUP, attr: Math.pow(1 / NPC_SHARE_MARKUP, 2.2) * Math.pow(0.4 + 40 / 80, 1.3) * 1.15, cap: Infinity, sold: 0 };
@@ -1121,6 +1236,7 @@ function closeBooks(s: GameState, c: Company) {
   const L = c.ledger;
   for (const b of Object.values(s.buildings)) {
     if (b.owner !== c.id) continue;
+    if (idle(s, b)) { b.report.wages = b.report.maint = 0; continue; }
     const def = BUILDINGS[b.type];
     const mb = mgrBonus(s, b); const wages = Math.round(b.workers * b.wage * (1 - mb.exp)); const maint = Math.round(b.invested * def.maintPct / 100 * b.maint / 100 * (1 - mb.exp));
     L.wages += wages; L.maint += maint; b.report.wages = wages; b.report.maint = maint + (b.mall ? b.rent ?? 0 : 0);
@@ -1130,8 +1246,9 @@ function closeBooks(s: GameState, c: Company) {
     if (wr < 0.9 && b.workers > 0) { const quit = Math.floor(b.workers * (0.9 - wr) * 0.6 + rnd(s)); if (quit > 0) { if (b.type === 'factory' && b.layout) removeWorkers(b, quit); else b.workers = Math.max(0, b.workers - quit); b.report.note += ` ${quit} workers quit over low pay.`; } }
   }
   for (const m of c.staff ?? []) L.wages += m.salary;
-  for (const [p, budget] of Object.entries(c.ads) as [ProductId, number][]) L.ads += budget;
-  for (const p of PRODUCT_LIST) c.brand[p.id] = Math.min(100, c.brand[p.id] * 0.92 + 0.8 * Math.sqrt((c.ads[p.id] ?? 0) / 100));
+  const adPower: Partial<Record<ProductId, number>> = {};
+  for (const x of s.adContracts ?? []) if (x.owner === c.id) { L.ads += x.fee; adPower[x.product] = (adPower[x.product] ?? 0) + x.fee * (MEDIA.find(m => m.id === x.media)?.lev ?? 1); }
+  for (const p of PRODUCT_LIST) c.brand[p.id] = Math.min(100, c.brand[p.id] * 0.92 + 0.8 * Math.sqrt((adPower[p.id] ?? 0) / 100));
   for (const b of Object.values(s.buildings)) if (b.owner === c.id && b.type === 'factory' && b.product) c.brand[b.product] = Math.min(100, c.brand[b.product] + 2 * moduleStats(b).brand);
   const loanInterest = serviceLoans(s, c);
   L.interest = Math.round(loanInterest + Math.max(0, -c.cash) * 0.02 - Math.max(0, c.cash) * 0.0025);
@@ -1200,10 +1317,10 @@ function bestSource(s: GameState, buyer: Building, product: ProductId): string {
   for (const o of Object.values(s.buildings)) {
     if (o.product !== product || o.type === 'store' || o.type === 'rd' || o.id === buyer.id) continue;
     const internal = o.owner === buyer.owner; if (!internal && o.listPrice == null) continue;
-    const cost = (internal ? 0 : o.listPrice!) + transportPerUnit(s, product, o.city, buyer.city) * (railLink(s, o.idx, buyer.idx) ? RAIL_COST_MUL : 1);
+    const cost = (internal ? 0 : o.listPrice!) + haulCost(s, product, o.idx, buyer.idx);
     if (cost < bc) { bc = cost; best = o.id; }
   }
-  for (const city of s.cities) { const gd = harbourStocks(s.cities, harbourId(city.id), product); if (!gd) continue; const cost = harbourGoodPrice(s, gd) + transportPerUnit(s, product, city.id, buyer.city) * (railLink(s, cityTile(s, city), buyer.idx) ? RAIL_COST_MUL : 1); if (cost < bc) { bc = cost; best = harbourId(city.id); } }
+  for (const city of s.cities) { const gd = harbourStocks(s.cities, harbourId(city.id), product); if (!gd) continue; const cost = harbourGoodPrice(s, gd) + haulCost(s, product, cityTile(s, city), buyer.idx); if (cost < bc) { bc = cost; best = harbourId(city.id); } }
   return best;
 }
 function aiManage(s: GameState, c: Company) {
@@ -1243,7 +1360,7 @@ function aiTurn(s: GameState, c: Company) {
     const prod = mine.find(b => b.product === p && b.type !== 'store');
     if (prod) continue;
     const def = PRODUCTS[p];
-    const btype: BuildingType = def.kind === 'raw' ? (p === 'timber' ? 'forest' : p === 'ore' ? 'mine' : p === 'oil' ? 'oil' : 'farm') : 'factory';
+    const btype: BuildingType = def.kind === 'raw' ? (p === 'timber' ? 'forest' : (p === 'ore' || p === 'copper') ? 'mine' : p === 'oil' ? 'oil' : 'farm') : 'factory';
     if (tryBuild(s, c, btype, p, mine[0]?.city)) return;
   }
   // store in a city we don't serve yet
@@ -1288,7 +1405,7 @@ function makePerson(s: GameState, kind: 'manager' | 'advisor'): Person {
   const stat = () => clamp(Math.round(2 + rnd(s) * rnd(s) * 8 + rnd(s) * 2), 1, 10); // mostly mediocre, rarely brilliant
   const p: Person = {
     id: 'p' + s.nextId++, name: FIRST[Math.floor(rnd(s) * FIRST.length)] + ' ' + LAST[Math.floor(rnd(s) * LAST.length)], portrait: Math.floor(rnd(s) * 72),
-    age: 26 + Math.floor(rnd(s) * 36), kind, spec: '', eff: 0, prod: 0, exp: 0, skill: 0, salary: 0,
+    age: 26 + Math.floor(rnd(s) * 36), kind, term: [12, 12, 18, 24][Math.floor(rnd(s) * 4)], spec: '', eff: 0, prod: 0, exp: 0, skill: 0, salary: 0,
   };
   if (kind === 'manager') {
     p.spec = MGR_SPECS[Math.floor(rnd(s) * MGR_SPECS.length)]; p.eff = stat(); p.prod = stat(); p.exp = stat();
@@ -1298,12 +1415,29 @@ function makePerson(s: GameState, kind: 'manager' | 'advisor'): Person {
   }
   return p;
 }
-/** Keep the job market stocked: some candidates leave, new ones appear. */
-export function refreshCandidates(s: GameState, initial = false) {
-  let pool = (s.candidates ??= []);
-  if (!initial) s.candidates = pool = pool.filter(() => rnd(s) > 0.3);
-  while (pool.filter(x => x.kind === 'manager').length < 7) pool.push(makePerson(s, 'manager'));
-  while (pool.filter(x => x.kind === 'advisor').length < 4) pool.push(makePerson(s, 'advisor'));
+/** A fresh short list every round: a few managers and advisors. Unhired ones leave. */
+export function refreshCandidates(s: GameState, _initial = false) {
+  s.candidates = [];
+  for (let i = 0; i < 5; i++) s.candidates.push(makePerson(s, 'manager'));
+  for (let i = 0; i < 3; i++) s.candidates.push(makePerson(s, 'advisor'));
+}
+/** Sealed bids: the highest salary offer wins each candidate (earliest bid on a tie). A company that is already full, or short of cash, is skipped. */
+function resolveHiring(s: GameState) {
+  const order = [...(s.candidates ?? [])].filter(p => p.bids?.length).sort((x, y) => Math.max(...y.bids!.map(b => b.salary)) - Math.max(...x.bids!.map(b => b.salary)));
+  for (const p of order) {
+    const bids = [...p.bids!].sort((x, y) => y.salary - x.salary);
+    let winner: { company: string; salary: number } | undefined;
+    for (const b of bids) {
+      const c = s.companies.find(x => x.id === b.company); if (!c || c.bankrupt) continue;
+      const have = (c.staff ?? []).filter(x => x.kind === p.kind).length;
+      if (have >= MAX_STAFF[p.kind] || c.cash < b.salary * 2) continue; winner = b; break;
+    }
+    for (const b of bids) { const c = s.companies.find(x => x.id === b.company); if (c && !c.bankrupt && b !== winner) c.news.push({ turn: s.turn, text: winner ? `You lost the bidding for ${p.name} (${p.kind}); the winning offer was higher or yours could not be honoured.` : `${p.name} could not be hired: your offer was not valid any more.` }); }
+    if (!winner) continue;
+    const c = s.companies.find(x => x.id === winner!.company)!;
+    const hired: Person = { ...p, bids: undefined, salary: winner.salary, assigned: null, hiredTurn: s.turn, contractEnd: s.turn + (p.term ?? 12) }; (c.staff ??= []).push(hired);
+    c.news.push({ turn: s.turn, text: `${p.name} accepted your offer and joins as ${p.kind === 'manager' ? 'manager' : 'advisor'} for ${fmtMoney(winner.salary)} a month.` });
+  }
 }
 /** Bonuses from the manager running a facility. Managers know their own kind of building best; elsewhere they are half as useful. */
 export function mgrBonus(s: GameState, b: Building): { eff: number; prod: number; exp: number } {
@@ -1331,7 +1465,7 @@ export function advice(s: GameState, c: Company): { topic: string; text: string;
     if (c.cash < 30_000) add('Cash is low: wages and loan payments may overdraw you.', 'bad', 4);
     for (const o of s.companies) if (o.id !== c.id && !o.bankrupt && o.price && o.priceHist && o.priceHist.length > 3 && o.price / o.priceHist[o.priceHist.length - 4] > 1.1) add(`${o.name} shares gained ${((o.price / o.priceHist[o.priceHist.length - 4] - 1) * 100).toFixed(0)}% in three months.`, 'info', 2);
   } else if (a.spec === 'production') {
-    for (const b of mine) { if (!b.product || b.type === 'store') continue; const e = efficiency(s, b); if (e < 0.8) { const why = b.condition < 60 ? 'its condition is poor — raise maintenance' : b.wage < cityWage(s, b.city) * 0.95 ? 'wages are below the city average' : 'it is understaffed'; add(`${b.name} runs at ${(e * 100).toFixed(0)}%: ${why}.`, 'bad', 5 + (1 - e) * 5, b.id); } }
+    for (const b of mine) { if (!b.product || b.type === 'store' || b.building) continue; const e = efficiency(s, b); if (e < 0.8) { const why = b.condition < 60 ? 'its condition is poor — raise maintenance' : areaInfo(s, b).factor < 0.8 ? 'there is little ' + ({ pop: 'population', deposits: 'ore or oil', trees: 'forest', farmland: 'farmland' } as Record<string, string>)[areaInfo(s, b).kind] + ' around it' : b.wage < cityWage(s, b.city) * 0.95 ? 'wages are below the city average' : 'it is understaffed'; add(`${b.name} runs at ${(e * 100).toFixed(0)}%: ${why}.`, 'bad', 5 + (1 - e) * 5, b.id); } }
     for (const b of mine) if (b.type !== 'store' && b.type !== 'rd' && b.product && !(c.staff ?? []).some(m => m.assigned === b.id)) add(`${b.name} has no manager.`, 'info', 1, b.id);
     const best = mine.filter(b => b.hist && b.hist.length).sort((x, y) => y.hist![y.hist!.length - 1] - x.hist![x.hist!.length - 1])[0]; if (best) add(`${best.name} is your best earner (${fmtMoney(best.hist![best.hist!.length - 1])} last month).`, 'good', 2, best.id);
   } else {
@@ -1373,9 +1507,9 @@ function spawnVacancy(s: GameState, quiet = false): boolean {
   return false;
 }
 function spawnVacancies(s: GameState) {
-  s.vacant = (s.vacant ?? []).filter(v => s.turn - v.listedTurn < VACANT_LIFE && !s.lots[lotKey(v.idx)]);
+  s.vacant = (s.vacant ?? []).filter(v => (v.perm || s.turn - v.listedTurn < VACANT_LIFE) && !s.lots[lotKey(v.idx)]);
   const r = rnd(s), n = r < 0.15 ? 0 : r < 0.55 ? 1 : 2;
-  for (let i = 0; i < n && s.vacant.length < VACANT_MAX; i++) spawnVacancy(s);
+  for (let i = 0; i < n && s.vacant.filter(v => !v.perm).length < VACANT_MAX; i++) spawnVacancy(s);
 }
 
 // ---------------------------------------------------------------- malls
@@ -1384,6 +1518,7 @@ function collectRents(s: GameState) {
   for (const u of Object.values(s.buildings).filter(x => x.mall)) {
     const m = s.buildings[u.mall!]; const t = s.companies.find(x => x.id === u.owner)!;
     if (!m || t.bankrupt) { removeBuilding(s, u); continue; }
+    if (m.building) continue; // the mall is not open yet
     const mo = s.companies.find(x => x.id === m.owner)!; const sl = u.slots[0];
     if (sl?.product && t.brand[sl.product] < MALL_MIN_BRAND / 2) {
       const msg = `${m.name} evicted your ${PRODUCTS[sl.product].name.toLowerCase()} shop: the brand became too weak for a branded unit.`;
@@ -1397,7 +1532,7 @@ function collectRents(s: GameState) {
 }
 export function mallInfos(s: GameState): MallInfo[] {
   return Object.values(s.buildings).filter(b => b.type === 'mall').map(m => ({
-    id: m.id, owner: m.owner, name: m.name, city: m.city, idx: m.idx, rent: m.rent ?? 0, units: MALL_UNITS, cond: Math.round(m.condition),
+    id: m.id, owner: m.owner, name: m.name, city: m.city, idx: m.idx, rent: m.rent ?? 0, opensIn: m.building ?? 0, units: MALL_UNITS, cond: Math.round(m.condition),
     tenants: Object.values(s.buildings).filter(u => u.mall === m.id).map(u => ({ company: u.owner, product: u.slots[0]?.product ?? null, rent: u.owner === m.owner ? 0 : u.rent ?? 0, leaseEnd: u.leaseEnd ?? 0, building: u.id })),
   }));
 }
@@ -1437,4 +1572,49 @@ export const subsidyText = (x: Subsidy) => `${x.reward === 'land' ? Math.round(x
 function spawnSubsidies(s: GameState) {
   s.subsidies = (s.subsidies ?? []).filter(x => s.turn < x.expires && !hasKind(s, x.city, x.kind, x.product ?? null));
   if (s.subsidies.length < SUBSIDY_MAX && rnd(s) < 0.45) spawnSubsidy(s);
+}
+
+// ---------------------------------------------------------------- construction
+/** A building does nothing while it is being built, and a mall unit waits for its mall to open. */
+export const idle = (s: GameState, b: Building): boolean => !!b.building || (!!b.mall && !!s.buildings[b.mall]?.building);
+function completeBuilding(s: GameState, b: Building) {
+  const c = s.companies.find(x => x.id === b.owner); if (!c || c.bankrupt) return; const def = BUILDINGS[b.type];
+  s.news.push({ turn: s.turn, kind: 'info', tag: 'opening', text: `${c.name} opens ${/^[aeiou]/i.test(def.name) ? 'an' : 'a'} ${def.name.toLowerCase()}${b.product && b.type !== 'store' && b.type !== 'rd' ? ' for ' + PRODUCTS[b.product].name.toLowerCase() : ''} in ${s.cities[b.city].name}.` });
+  c.news.push({ turn: s.turn, text: `${b.name} is finished and starts operating.` });
+  fillStaff(s, c.id, b);
+  if (b.type === 'mall') for (const u of Object.values(s.buildings)) if (u.mall === b.id) { const t = s.companies.find(x => x.id === u.owner); if (t && !t.bankrupt) { fillStaff(s, t.id, u); if (t.id !== c.id) t.news.push({ turn: s.turn, text: `${b.name} has opened: your shop there starts trading.` }); } }
+}
+
+// ---------------------------------------------------------------- contracts
+export const OFFER_WINDOW = 3; // months before a contract ends in which rivals may make an offer
+/** A person on the job market (candidate) or a contract about to end (employee of any company). */
+function bidTarget(s: GameState, id: string): { p: Person; employer?: Company } | null {
+  const cand = (s.candidates ?? []).find(x => x.id === id); if (cand) return { p: cand };
+  for (const c of s.companies) { const p = c.staff?.find(x => x.id === id); if (p && !c.bankrupt) return { p, employer: c }; }
+  return null;
+}
+/** When a contract runs out it renews at the same salary, unless a rival bid more than the employer's own (counter-)offer: then the person moves. */
+function resolveContracts(s: GameState) {
+  for (const emp of s.companies) {
+    if (emp.bankrupt) continue;
+    for (const p of [...(emp.staff ?? [])]) {
+      if (p.contractEnd == null) p.contractEnd = s.turn + (p.term ?? 12);
+      if (s.turn < p.contractEnd) continue;
+      const own = Math.max(p.salary, p.bids?.find(b => b.company === emp.id)?.salary ?? 0);
+      const rivals = (p.bids ?? []).filter(b => b.company !== emp.id).sort((x, y) => y.salary - x.salary);
+      let win: { company: string; salary: number } | undefined;
+      for (const b of rivals) {
+        if (b.salary <= own) break;
+        const c = s.companies.find(x => x.id === b.company); if (!c || c.bankrupt) continue;
+        if ((c.staff ?? []).filter(x => x.kind === p.kind).length >= MAX_STAFF[p.kind] || c.cash < b.salary * 2) continue; win = b; break;
+      }
+      for (const b of rivals) if (b !== win) { const c = s.companies.find(x => x.id === b.company); if (c && !c.bankrupt) c.news.push({ turn: s.turn, text: `${p.name} stayed with ${emp.name}.` }); }
+      if (win) {
+        const c = s.companies.find(x => x.id === win!.company)!;
+        emp.staff = emp.staff!.filter(x => x !== p); c.staff ??= []; c.staff.push({ ...p, bids: undefined, assigned: null, salary: win.salary, hiredTurn: s.turn, contractEnd: s.turn + (p.term ?? 12) });
+        emp.news.push({ turn: s.turn, text: `${p.name} left for ${c.name}, who offered ${fmtMoney(win.salary)} a month.` }); c.news.push({ turn: s.turn, text: `${p.name} accepted your offer and joins from ${emp.name} for ${fmtMoney(win.salary)} a month.` });
+        s.news.push({ turn: s.turn, kind: 'info', tag: 'opening', text: `${c.name} lures ${p.kind === 'manager' ? 'a manager' : 'an advisor'}, ${p.name}, away from ${emp.name}.` });
+      } else { p.salary = own; p.contractEnd = s.turn + (p.term ?? 12); p.bids = undefined; emp.news.push({ turn: s.turn, text: `${p.name}'s contract was renewed for ${p.term ?? 12} months at ${fmtMoney(own)} a month.` }); }
+    }
+  }
 }

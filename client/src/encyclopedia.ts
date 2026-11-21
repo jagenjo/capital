@@ -1,7 +1,8 @@
 // Encyclopedia: every product as a node, with an arrow from each ingredient to what it is made into. Click a product for details.
+import { tr } from './i18n.js';
 import { PRODUCTS, PRODUCT_LIST, type ProductId } from '../../shared/data.js';
 import { isUnlocked, canResearch, researchOf } from '../../shared/engine.js';
-import { h, money2, num, asset } from './util.js';
+import { h, money2, num, asset, crisp } from './util.js';
 import { S } from './state.js';
 
 const NW = 150, NH = 46, COLW = 215, ROWH = 62, PAD = 16;
@@ -21,7 +22,7 @@ export function encyclopediaScreen(): HTMLElement {
     list.forEach((id, i) => pos.set(id, { x: PAD + d * COLW, y: PAD + i * ROWH })); rows = Math.max(rows, list.length);
   }
   const W = PAD * 2 + (Math.max(...cols.keys())) * COLW + NW, H = PAD * 2 + rows * ROWH;
-  const cv = h('canvas', { width: W, height: H, style: 'display:block;background:#efece0;cursor:pointer' }); const g = cv.getContext('2d')!;
+  const cv = crisp(h('canvas', { style: 'display:block;background:#efece0;cursor:pointer' }), W, H); const g = cv.getContext('2d')!;
   const rel = (p: ProductId) => { const set = new Set<ProductId>([p]); const up = (x: ProductId) => { for (const k of Object.keys(PRODUCTS[x].recipe) as ProductId[]) if (!set.has(k)) { set.add(k); up(k); } }; up(p); for (const q of PRODUCT_LIST) if (set.has(p) && PRODUCTS[q.id].recipe[p]) set.add(q.id); return set; };
   const draw = () => {
     g.clearRect(0, 0, W, H); g.fillStyle = '#efece0'; g.fillRect(0, 0, W, H);
@@ -40,7 +41,7 @@ export function encyclopediaScreen(): HTMLElement {
       g.fillStyle = lock ? '#e4dfcf' : '#fbfaf3'; g.fillRect(x, y, NW, NH); g.fillStyle = KCOL[p.kind]; g.fillRect(x, y, 8, NH);
       g.strokeStyle = p.id === sel ? '#ffb000' : '#8a8470'; g.lineWidth = p.id === sel ? 3 : 1; g.strokeRect(x + .5, y + .5, NW - 1, NH - 1);
       g.textAlign = 'left'; g.fillStyle = lock ? '#777' : '#222'; g.font = 'bold 12px system-ui'; g.fillText((lock ? '🔒 ' : '') + p.name, x + 14, y + 16, NW - 20);
-      g.fillStyle = '#666'; g.font = '10px system-ui'; g.fillText(p.kind + (p.research ? ' · hi-tech' : '') + ' · ' + money2(p.basePrice), x + 14, y + 32, NW - 20); g.globalAlpha = 1;
+      g.fillStyle = '#666'; g.font = '10px system-ui'; g.fillText(tr(p.kind) + (p.research ? tr(' · hi-tech') : '') + ' · ' + money2(p.basePrice), x + 14, y + 32, NW - 20); g.globalAlpha = 1;
     }
   };
   const isAncestor = (a: ProductId, of: ProductId): boolean => a !== of && (!!PRODUCTS[of].recipe[a] || Object.keys(PRODUCTS[of].recipe).some(k => isAncestor(a, k as ProductId)));
