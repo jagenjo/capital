@@ -96,6 +96,13 @@ export interface Vacancy {
   cond: number; land: number; build: number; // condition %, price of the land and of the building
   listedTurn: number; origin: 'closure' | 'bankrupt' | 'estate';
 }
+/** A city's offer to the first company that sets up a kind of business in its area. */
+export interface Subsidy {
+  id: string; city: number; kind: BuildingType; product?: ProductId;
+  reward: 'land' | 'tax'; amount: number;  // land: share of the land price paid by the city; tax: share of the company tax waived
+  months: number;                           // tax: how long the break lasts
+  listedTurn: number; expires: number;
+}
 export interface HistoryPoint { turn: number; cash: number; netWorth: number; revenue: number; profit: number; debt: number }
 
 export interface Company {
@@ -113,14 +120,16 @@ export interface Company {
   // stock market: `shares` exist in total; `float` is held by the market, the rest by the company itself (treasury) and investors (their `portfolio`)
   shares?: number; float?: number; price?: number; priceHist?: number[]; portfolio?: Record<string, number>; policy?: Policy; lastDps?: number; lastYear?: { profit: number; dividends: number; invested: number; target: string };
   staff?: Person[];
+  taxBreak?: { city: number; cut: number; until: number }; // company tax reduced while it has a building in that city
   research?: Partial<Record<ProductId, number>>; // R&D points spent unlocking hi-tech products
 }
 
 export interface Lot { owner: string; paid: number }
-export interface NewsItem { turn: number; text: string; kind: 'info' | 'good' | 'bad'; tag?: 'opening' | 'product' | 'market' | 'vacant' }
+export interface NewsItem { turn: number; text: string; kind: 'info' | 'good' | 'bad'; tag?: 'opening' | 'product' | 'market' | 'vacant' | 'subsidy' }
 export interface Effect { kind: string; until: number; city?: number; product?: ProductId; value: number }
 
 export interface GameState {
+  subsidies?: Subsidy[]; // open city incentives
   vacant?: Vacancy[]; // facilities for sale
   candidates?: Person[]; // job market shared by all companies
   sold?: Record<string, 1>; // 'company:product' pairs already reported as 'starts selling'
@@ -200,6 +209,6 @@ export interface View {
   cityLabor: { used: number; pool: number }[];
   news: NewsItem[];
   finished: boolean; winner?: string; endReason?: string;
-  malls: MallInfo[]; vacant: Vacancy[]; candidates: Person[]; advice: { topic: string; text: string; tone: 'good' | 'bad' | 'info'; building?: string }[];
+  subsidies: Subsidy[]; malls: MallInfo[]; vacant: Vacancy[]; candidates: Person[]; advice: { topic: string; text: string; tone: 'good' | 'bad' | 'info'; building?: string }[];
   rankings: { id: string; name: string; netWorth: number }[];
 }

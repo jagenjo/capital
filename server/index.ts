@@ -30,7 +30,7 @@ function flush() {
 }
 setInterval(flush, 2000);
 // Development policy: saves in an outdated/unreadable format are discarded (no archiving) and a fresh test game is created.
-const WORLD_VERSION = 19;
+const WORLD_VERSION = 20;
 function newGame(settings: Settings, pw = ''): GameRec {
   const salt = rid(8);
   return { id: rid(4), state: createGame(settings), players: [], gameSalt: salt, gameHash: pw ? hash(pw, salt) : null, nextTurnAt: Date.now() + settings.turnIntervalHours * 3600_000, paused: false, createdAt: Date.now() };

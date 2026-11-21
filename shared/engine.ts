@@ -6,7 +6,7 @@ import {
   type ProductId, type BuildingType, type Terrain,
 } from './data.js';
 import { buildWorld, nearestCity } from './world.js';
-import type { GameState, Settings, City, Company, Building, StoreSlot, Stock, Action, Listing, Ledger, LayoutCell, HarbourGood, Loan, Person, Vacancy, MallInfo } from './types.js';
+import type { GameState, Settings, City, Company, Building, StoreSlot, Stock, Action, Listing, Ledger, LayoutCell, HarbourGood, Loan, Person, Vacancy, MallInfo, Subsidy } from './types.js';
 
 // ---------------------------------------------------------------- random
 export function rnd(s: GameState): number {
@@ -53,6 +53,7 @@ export function createGame(settings: Settings): GameState {
   refreshHarbours(s);
   refreshCandidates(s, true);
   for (let i = 0; i < 6; i++) spawnVacancy(s, true);
+  for (let i = 0; i < 4; i++) spawnSubsidy(s, true);
   for (const p of PRODUCT_LIST) s.market[p.id] = { idx: 1, demand: 1 };
   s.news.push({ turn: 0, text: `Welcome to ${settings.name}. The economy is open for business.`, kind: 'info' });
   for (let i = 0; i < settings.aiCompanies; i++) addCompany(s, { name: AI_NAMES[i % AI_NAMES.length], isAI: true });
@@ -436,7 +437,9 @@ export function applyAction(s: GameState, cid: string, a: Action): Res {
       else if (a.btype === 'factory') { if (!a.product || PRODUCTS[a.product]?.kind === 'raw' || !PRODUCTS[a.product]) return err('Choose a product to manufacture'); if (!isUnlocked(c, a.product)) return err(PRODUCTS[a.product].name + ' is hi-tech: research it with an R&D building first'); product = a.product; }
       else if (a.btype === 'rd') product = a.product && PRODUCTS[a.product] ? a.product : 'bread';
       const landCost = lot ? 0 : lotPrice(s, a.idx);
-      const total = landCost + def.cost;
+      const sub = openSubsidy(s, cityId, a.btype, product);
+      const grant = sub?.reward === 'land' ? Math.round(lotPrice(s, a.idx) * sub.amount) : 0;
+      const total = Math.max(0, landCost + def.cost - grant);
       if (!canPay(total)) return err(`Not enough cash (need ${fmtMoney(total)})`);
       pay(total);
       if (!lot) s.lots[k] = { owner: cid, paid: landCost };
@@ -444,6 +447,7 @@ export function applyAction(s: GameState, cid: string, a: Action): Res {
       if (a.btype === 'store') b.slots[0].product = null;
       s.buildings[b.id] = b;
       s.news.push({ turn: s.turn, kind: 'info', tag: 'opening', text: `${c.name} opens ${/^[aeiou]/i.test(def.name) ? 'an' : 'a'} ${def.name.toLowerCase()}${product && a.btype !== 'store' ? ' for ' + PRODUCTS[product].name.toLowerCase() : ''} in ${s.cities[cityId].name}.` });
+      if (sub) claimSubsidy(s, c, sub, grant);
       fillStaff(s, cid, b);
       return { ok: true, info: b.id };
     }
@@ -799,6 +803,7 @@ export function processTurn(s: GameState) {
   refreshHarbours(s);
   refreshCandidates(s);
   spawnVacancies(s);
+  spawnSubsidies(s);
   for (const c of live) if (c.isAI) aiTurn(s, c);
 
   // production tiers: raw first, then deeper recipes
@@ -1133,7 +1138,8 @@ function closeBooks(s: GameState, c: Company) {
   const pretax = L.revenue - L.purchases - L.transport - L.wages - L.maint - L.ads - L.interest;
   let taxable = pretax - c.lossCarry; c.lossCarry = 0;
   if (taxable < 0) { c.lossCarry = -taxable; taxable = 0; }
-  L.tax = Math.round(taxable * 0.25);
+  let taxCut = 0; if (c.taxBreak) { if (s.turn >= c.taxBreak.until) { c.news.push({ turn: s.turn, text: `The tax break from ${s.cities[c.taxBreak.city].name} has ended.` }); c.taxBreak = undefined; } else if (Object.values(s.buildings).some(b => b.owner === c.id && b.city === c.taxBreak!.city)) taxCut = c.taxBreak.cut; }
+  L.tax = Math.round(taxable * 0.25 * (1 - taxCut));
   L.profit = pretax - L.tax;
   c.cash -= L.wages + L.maint + L.ads + L.interest + L.tax;
   c.cash = Math.round(c.cash);
@@ -1394,4 +1400,41 @@ export function mallInfos(s: GameState): MallInfo[] {
     id: m.id, owner: m.owner, name: m.name, city: m.city, idx: m.idx, rent: m.rent ?? 0, units: MALL_UNITS, cond: Math.round(m.condition),
     tenants: Object.values(s.buildings).filter(u => u.mall === m.id).map(u => ({ company: u.owner, product: u.slots[0]?.product ?? null, rent: u.owner === m.owner ? 0 : u.rent ?? 0, leaseEnd: u.leaseEnd ?? 0, building: u.id })),
   }));
+}
+
+// ---------------------------------------------------------------- city subsidies
+export const SUBSIDY_LIFE = 10, SUBSIDY_MAX = 5;
+const SUB_KINDS: BuildingType[] = ['factory', 'factory', 'store', 'store', 'rd', 'mall'];
+/** An open offer that this construction would claim: the first of its kind in that city's area. */
+export function openSubsidy(s: GameState, city: number, kind: BuildingType, product: ProductId | null): Subsidy | undefined {
+  return (s.subsidies ?? []).find(x => x.city === city && x.kind === kind && (!x.product || x.product === product) && !hasKind(s, city, kind, x.product ?? null));
+}
+const hasKind = (s: GameState, city: number, kind: BuildingType, product: ProductId | null) => Object.values(s.buildings).some(b => b.city === city && b.type === kind && !b.mall && (!product || b.product === product));
+function claimSubsidy(s: GameState, c: Company, x: Subsidy, grant: number) {
+  s.subsidies = (s.subsidies ?? []).filter(o => o !== x); const city = s.cities[x.city], what = BUILDINGS[x.kind].name.toLowerCase() + (x.product ? ' for ' + PRODUCTS[x.product].name.toLowerCase() : '');
+  let text: string;
+  if (x.reward === 'land') text = `${city.name} pays ${Math.round(x.amount * 100)}% of the land for ${c.name}'s new ${what} (${fmtMoney(grant)}).`;
+  else { c.taxBreak = { city: x.city, cut: x.amount, until: s.turn + x.months }; text = `${city.name} cuts ${c.name}'s taxes by ${Math.round(x.amount * 100)}% for ${x.months} months for opening the town's first ${what}.`; }
+  s.news.push({ turn: s.turn, kind: 'good', tag: 'subsidy', text }); c.news.push({ turn: s.turn, text: 'Subsidy won: ' + text });
+}
+function spawnSubsidy(s: GameState, quiet = false): boolean {
+  const open = s.subsidies ??= []; const free = s.cities.filter(c => !open.some(x => x.city === c.id));
+  for (let k = 0; k < 20 && free.length; k++) {
+    const city = free[Math.floor(rnd(s) * free.length)]; const kind = SUB_KINDS[Math.floor(rnd(s) * SUB_KINDS.length)];
+    if (kind === 'mall' && city.town) continue;
+    let product: ProductId | undefined;
+    if (kind === 'factory') { const ps = PRODUCT_LIST.filter(p => p.kind !== 'raw' && !p.research && !hasKind(s, city.id, 'factory', p.id)); if (!ps.length) continue; product = ps[Math.floor(rnd(s) * ps.length)].id; }
+    else if (hasKind(s, city.id, kind, null)) continue;
+    const land = rnd(s) < 0.5;
+    const x: Subsidy = { id: 's' + s.nextId++, city: city.id, kind, product, reward: land ? 'land' : 'tax', amount: land ? Math.round((0.4 + rnd(s) * 0.3) * 20) / 20 : Math.round((0.3 + rnd(s) * 0.3) * 20) / 20, months: 6 + Math.floor(rnd(s) * 13), listedTurn: s.turn, expires: s.turn + SUBSIDY_LIFE };
+    open.push(x);
+    if (!quiet) s.news.push({ turn: s.turn, kind: 'info', tag: 'subsidy', text: `${city.name} offers ${subsidyText(x)}` });
+    return true;
+  }
+  return false;
+}
+export const subsidyText = (x: Subsidy) => `${x.reward === 'land' ? Math.round(x.amount * 100) + '% off the land' : Math.round(x.amount * 100) + '% less tax for ' + x.months + ' months'} to the first ${BUILDINGS[x.kind].name.toLowerCase()}${x.product ? ' for ' + PRODUCTS[x.product].name.toLowerCase() : ''} in its area.`;
+function spawnSubsidies(s: GameState) {
+  s.subsidies = (s.subsidies ?? []).filter(x => s.turn < x.expires && !hasKind(s, x.city, x.kind, x.product ?? null));
+  if (s.subsidies.length < SUBSIDY_MAX && rnd(s) < 0.45) spawnSubsidy(s);
 }

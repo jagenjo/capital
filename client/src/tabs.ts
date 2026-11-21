@@ -83,7 +83,7 @@ export function harbourTable(cityIds?: number[]): HTMLElement {
 // ---------- Finance
 export function financeScreen(): HTMLElement {
   const v = S.view!; const me = v.me; const L = me.ledger;
-  const lines: [string, number][] = [['Revenue', L.revenue], ['Purchases', -L.purchases], ['Transport', -L.transport], ['Wages', -L.wages], ['Maintenance', -L.maint], ['Advertising', -L.ads], ['Interest', -L.interest], ['Tax (25%)', -L.tax]];
+  const lines: [string, number][] = [['Revenue', L.revenue], ['Purchases', -L.purchases], ['Transport', -L.transport], ['Wages', -L.wages], ['Maintenance', -L.maint], ['Advertising', -L.ads], ['Interest', -L.interest], [me.taxBreak && me.taxBreak.until > v.turn ? `Tax (25%, −${Math.round(me.taxBreak.cut * 100)}% break)` : 'Tax (25%)', -L.tax]];
   const cv = h('canvas', { width: 640, height: 260 });
   setTimeout(() => chart(cv), 0);
   return h('div', { class: 'grid2' },

@@ -214,7 +214,7 @@ export function buildWorld(s: GameState) {
   // --- travel distance matrix (roads fast, ferries across sea)
   s.dist = cities.map(() => cities.map(() => 0));
   cities.forEach((_, a) => { const { dist } = dijkstra(tiles, centers[a], travelCost); cities.forEach((__, b) => { s.dist![a][b] = a === b ? 15 : Math.round(dist[centers[b]] * WORLD_SCALE); }); });
-  s.world = { v: 19, w: WW, h: WH, tiles: tiles.join(''), rails };
+  s.world = { v: 20, w: WW, h: WH, tiles: tiles.join(''), rails };
 }
 
 export const nearestCity = (cities: { x: number; y: number }[], idx: number): number => {

@@ -2,7 +2,8 @@
 //   top-left: world view (minimap)      top-right: zoom view
 //   bottom-left: selected tile stats    bottom-right: selected tile configuration
 import { BUILDINGS, TERRAIN_INFO, PRODUCTS, PRODUCT_LIST, WORLD_SCALE, type ProductId, type Terrain } from '../../shared/data.js';
-import { lotPrice, terrainAt, isUnlocked } from '../../shared/engine.js';
+import { lotPrice, terrainAt, isUnlocked, subsidyText } from '../../shared/engine.js';
+import { nearestCity } from '../../shared/world.js';
 import { h, money, asset, toast } from './util.js';
 import { S, act, companyOf } from './state.js';
 import { buildingPanel } from './building.js';
@@ -72,12 +73,14 @@ function lotPanel(idx: number): HTMLElement {
   const factProduct = h('select', null, PRODUCT_LIST.filter(p => p.kind !== 'raw').map(p => h('option', { value: p.id, selected: p.id === (buildChoice.product ?? 'bread'), disabled: !isUnlocked(v.me, p.id) }, (isUnlocked(v.me, p.id) ? '' : '🔒 ') + p.name + ' (' + Object.entries(p.recipe).map(([k, q]) => q + '× ' + PRODUCTS[k as ProductId].name).join(', ') + ')')));
   factProduct.addEventListener('change', () => { buildChoice.product = factProduct.value as ProductId; });
   const rawProduct = h('select', null, ['grain', 'livestock'].map(p => h('option', { value: p }, PRODUCTS[p as ProductId].name)));
+  const cityId = nearestCity(v.cities, idx);
+  const subFor = (d: { type: string }) => v.subsidies.find(x => x.city === cityId && x.kind === d.type && (!x.product || (d.type === 'factory' && x.product === (factProduct.value as ProductId))));
   return h('div', { class: 'cfg scroll col' },
     h('div', null, lot ? 'You own this lot.' : !TERRAIN_INFO[t].price ? 'This tile cannot be built on.' : 'Land price: ' + money(price)),
     TERRAIN_INFO[t].price && opts.length === 0 ? h('div', { class: 'muted' }, 'Nothing can be built on this terrain. Farms need farmland, logging camps forest, mines ore deposits, oil wells oil fields; stores need downtown/suburb.') : h('div', { class: 'col' },
       opts.map(d => h('div', { class: 'row', style: 'border-top:1px solid #e3e3dc;padding-top:6px' },
         h('img', { src: asset(d.photo), style: 'width:80px;height:52px;object-fit:cover;border:1px solid #bbb' }),
-        h('div', { class: 'grow' }, h('b', null, d.name), h('div', { class: 'note' }, d.desc), d.type === 'factory' && factProduct, d.type === 'farm' && rawProduct),
+        h('div', { class: 'grow' }, h('b', null, d.name), h('div', { class: 'note' }, d.desc), d.type === 'factory' && factProduct, d.type === 'farm' && rawProduct, (() => { const x = subFor(d); return x ? h('div', { class: 'good', style: 'font-weight:bold' }, '🎁 ' + v.cities[cityId].name + ' offers ' + subsidyText(x)) : null; })()),
         h('button', { class: 'primary', onclick: async () => {
           const product = d.type === 'factory' ? (factProduct.value as ProductId) : d.type === 'farm' ? (rawProduct.value as ProductId) : undefined;
           const r = await act({ type: 'build', idx, btype: d.type, product });

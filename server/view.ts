@@ -32,7 +32,7 @@ export function buildView(g: GameRec, companyId: string): View {
     cityWages: s.cities.map(c => cityWage(s, c.id)),
     cityLabor: s.cities.map(c => ({ used: laborUsed(s, c.id), pool: laborPool(c) })),
     news: s.news.slice(-100).reverse(), finished: s.finished, winner: s.winner, endReason: s.endReason,
-    malls: mallInfos(s), vacant: s.vacant ?? [], candidates: s.candidates ?? [], advice: advice(s, me),
+    subsidies: s.subsidies ?? [], malls: mallInfos(s), vacant: s.vacant ?? [], candidates: s.candidates ?? [], advice: advice(s, me),
     rankings: rankings(s),
   };
 }
