@@ -2,13 +2,14 @@
 //   top-left: world view (minimap)      top-right: zoom view
 //   bottom-left: selected tile stats    bottom-right: selected tile configuration
 import { BUILDINGS, TERRAIN_INFO, PRODUCTS, PRODUCT_LIST, WORLD_SCALE, type ProductId, type Terrain } from '../../shared/data.js';
-import { lotPrice, terrainAt } from '../../shared/engine.js';
+import { lotPrice, terrainAt, isUnlocked } from '../../shared/engine.js';
 import { h, money, asset, toast } from './util.js';
 import { S, act, companyOf } from './state.js';
 import { buildingPanel } from './building.js';
 import { worldPanels, focusCity, setViewSize } from './worldmap.js';
 import { statsPanel, citiesPanel } from './tilestats.js';
 import { harbourTable } from './tabs.js';
+import { askPrice, newPrice, vacantName, buy, mallRentPanel } from './realestate.js';
 
 const buildChoice: { product: ProductId | null } = { product: null };
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
@@ -39,7 +40,7 @@ function configPanel(): HTMLElement {
           h('p', { class: 'note' }, 'A building belongs to its nearest city (labour, wages, customers). Everything is executed when the month turns: set staffing, prices and suppliers, then press "End turn".')),
         h('div', { style: 'flex:1;min-width:0' }, citiesPanel(id => { S.city = id; S.sel = null; S.buildingId = null; focusCity(id); S.render(); }))));
   } else {
-    const b = v.buildings.find(x => x.idx === S.sel);
+    const b = v.buildings.find(x => x.id === S.buildingId && x.idx === S.sel) ?? v.buildings.find(x => x.idx === S.sel && !x.mall);
     body = b ? buildingPanel(b) : lotPanel(S.sel);
   }
   return h('div', { class: 'panel area cfgarea' }, body);
@@ -58,11 +59,17 @@ function lotPanel(idx: number): HTMLElement {
   const v = S.view!; const wd = S.world!;
   const t = terrainAt({ world: wd }, idx) as Terrain;
   if (t === 'p') return harbourPanel(idx); const lot = v.lots[String(idx)]; const other = v.others.find(o => o.idx === idx);
+  const om = other && v.malls.find(m => m.id === other.id); if (om) return mallRentPanel(om);
   if (other) return h('div', { class: 'cfg scroll col' }, h('div', null, h('b', null, other.name)), h('div', null, 'Owned by ', h('b', null, companyOf(other.owner)?.name ?? '?')), other.product && h('div', null, 'Produces ' + PRODUCTS[other.product].name), h('div', { class: 'note' }, 'You can only configure your own buildings.'));
   if (lot && lot.owner !== v.me.id) return h('div', { class: 'cfg scroll col' }, h('div', null, 'Owned by ', h('b', null, companyOf(lot.owner)?.name ?? '?')));
+  const vac = v.vacant.find(x => x.idx === idx);
+  if (vac) return h('div', { class: 'cfg scroll col' }, h('div', { class: 'row' }, h('b', { style: 'font-size:15px' }, '🏷 For sale: ' + vacantName(vac)), h('span', { class: 'muted' }, vac.origin === 'bankrupt' ? 'liquidated company' : vac.origin === 'closure' ? 'owner closed down' : 'estate sale')),
+    h('div', null, 'Condition ' + vac.cond + '% · empty, no stock, no staff · land ' + money(vac.land) + ' + building ' + money(vac.build)),
+    h('div', { class: 'note' }, 'Building new would cost ' + money(newPrice(vac)) + ' — you save ' + money(newPrice(vac) - askPrice(vac)) + ' (' + Math.round((1 - askPrice(vac) / newPrice(vac)) * 100) + '%).'),
+    h('div', null, h('button', { class: 'primary', onclick: () => buy(vac) }, 'Buy for ' + money(askPrice(vac)))));
   const price = lot ? 0 : lotPrice({ cities: v.cities, world: wd }, idx);
   const opts = Object.values(BUILDINGS).filter(d => d.terrain.includes(t));
-  const factProduct = h('select', null, PRODUCT_LIST.filter(p => p.kind !== 'raw').map(p => h('option', { value: p.id, selected: p.id === (buildChoice.product ?? 'bread') }, p.name + ' (' + Object.entries(p.recipe).map(([k, q]) => q + '× ' + PRODUCTS[k as ProductId].name).join(', ') + ')')));
+  const factProduct = h('select', null, PRODUCT_LIST.filter(p => p.kind !== 'raw').map(p => h('option', { value: p.id, selected: p.id === (buildChoice.product ?? 'bread'), disabled: !isUnlocked(v.me, p.id) }, (isUnlocked(v.me, p.id) ? '' : '🔒 ') + p.name + ' (' + Object.entries(p.recipe).map(([k, q]) => q + '× ' + PRODUCTS[k as ProductId].name).join(', ') + ')')));
   factProduct.addEventListener('change', () => { buildChoice.product = factProduct.value as ProductId; });
   const rawProduct = h('select', null, ['grain', 'livestock'].map(p => h('option', { value: p }, PRODUCTS[p as ProductId].name)));
   return h('div', { class: 'cfg scroll col' },

@@ -1,12 +1,12 @@
 // Game engine: pure functions over GameState. One call to processTurn() = one month.
 import {
-  PRODUCTS, PRODUCT_LIST, BUILDINGS, TERRAIN_INFO, MAX_LINES, MAX_AUTO, MAX_STORE_SIZE, STORE_SLOTS, BASE_WAGE,
-  IMPORT_MARKUP, IMPORT_QUALITY, NPC_SHARE_MARKUP, MONTH_NAMES, COMPANY_COLORS, MODULES, FAC_GRID, WORLD_SCALE, WORLD_W, OVERSTAFF_CAP, OVERSTAFF_BONUS,
+  PRODUCTS, PRODUCT_LIST, BUILDINGS, LENDERS, type Lender, TERRAIN_INFO, MAX_LINES, MAX_AUTO, MAX_STORE_SIZE, STORE_SLOTS, BASE_WAGE,
+  MALL_UNITS, MALL_MIN_BRAND, MALL_FITOUT, MALL_TRAFFIC, MALL_BRAND_BOOST, MALL_LEASE, MALL_PER_CITY, IMPORT_MARKUP, IMPORT_QUALITY, NPC_SHARE_MARKUP, MONTH_NAMES, COMPANY_COLORS, MODULES, FAC_GRID, WORLD_SCALE, WORLD_W, OVERSTAFF_CAP, OVERSTAFF_BONUS,
   type ModuleType,
   type ProductId, type BuildingType, type Terrain,
 } from './data.js';
 import { buildWorld, nearestCity } from './world.js';
-import type { GameState, Settings, City, Company, Building, StoreSlot, Stock, Action, Listing, Ledger, LayoutCell, HarbourGood } from './types.js';
+import type { GameState, Settings, City, Company, Building, StoreSlot, Stock, Action, Listing, Ledger, LayoutCell, HarbourGood, Loan, Person, Vacancy, MallInfo } from './types.js';
 
 // ---------------------------------------------------------------- random
 export function rnd(s: GameState): number {
@@ -28,6 +28,7 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 
 const CITY_NAMES = ['Newbridge', 'Port Harlow', 'Dunmere', 'Alderton', 'Westhaven', 'Kingsford', 'Ravenna', 'Stoneport', 'Marlowe', 'Fairview', 'Oakdale', 'Ironvale', 'Brightwater', 'Coldharbor', 'Eastmoor', 'Silverton', 'Hartwell', 'Glenrock', 'Lakeshire', 'Redcliff'];
+const TOWN_NAMES = ['Ashby', 'Barrow', 'Cobham', 'Dalby', 'Elmstead', 'Foxley', 'Garston', 'Hadley', 'Ingleby', 'Jarrow', 'Kelby', 'Lowick', 'Marden', 'Netherby', 'Oxley', 'Pennick', 'Quarry Hill', 'Ridley', 'Selby', 'Thornby', 'Upton', 'Wexley', 'Yarrow', 'Aldwick', 'Bramley', 'Crofton', 'Denby', 'Eastwick', 'Fernley', 'Gorsey'];
 const AI_NAMES = ['Globex', 'Initech', 'Umbrella Trading', 'Hooli Goods', 'Acme Industries', 'Vandelay Ltd', 'Cyberdyne Supply', 'Stark Works'];
 
 export function createGame(settings: Settings): GameState {
@@ -43,8 +44,15 @@ export function createGame(settings: Settings): GameState {
       wealth: round2(rr(s, 0.75, 1.35)), wageIdx: round2(rr(s, 0.85, 1.2)), priceIdx: round2(rr(s, 0.85, 1.25)), radius: 5,
     });
   }
+  const tnames = shuffle(s, [...TOWN_NAMES]);
+  for (let i = 0; i < settings.cityCount; i++) {
+    const pop = Math.round(rr(s, 6000, 55000) / 500) * 500;
+    s.cities.push({ id: settings.cityCount + i, name: tnames[i % tnames.length], x: 0, y: 0, pop, wealth: round2(rr(s, 0.7, 1.25)), wageIdx: round2(rr(s, 0.8, 1.15)), priceIdx: round2(rr(s, 0.85, 1.2)), radius: 2, town: true });
+  }
   buildWorld(s);
   refreshHarbours(s);
+  refreshCandidates(s, true);
+  for (let i = 0; i < 6; i++) spawnVacancy(s, true);
   for (const p of PRODUCT_LIST) s.market[p.id] = { idx: 1, demand: 1 };
   s.news.push({ turn: 0, text: `Welcome to ${settings.name}. The economy is open for business.`, kind: 'info' });
   for (let i = 0; i < settings.aiCompanies; i++) addCompany(s, { name: AI_NAMES[i % AI_NAMES.length], isAI: true });
@@ -59,9 +67,10 @@ export function addCompany(s: GameState, o: { name: string; isAI?: boolean; play
     id: 'c' + s.nextId++, name: o.name, color: o.color ?? COMPANY_COLORS.find(x => !used.has(x)) ?? '#888',
     portrait: o.portrait ?? Math.floor(rnd(s) * 72), isAI: !!o.isAI, playerId: o.playerId,
     cash: s.settings.startCash, debt: 0, tech, brand, ads: {}, ledger: emptyLedger(), history: [], ready: !!o.isAI,
-    bankrupt: false, negMonths: 0, lossCarry: 0, news: [],
+    bankrupt: false, negMonths: 0, lossCarry: 0, news: [], loans: [],
   };
-  if (c.isAI) { const cons = PRODUCT_LIST.filter(p => p.kind === 'consumer' && p.depth <= 1); c.aiFocus = cons[Math.floor(rnd(s) * cons.length)].id; c.cash = Math.round(c.cash * 1.5); }
+  if (c.isAI) { const cons = PRODUCT_LIST.filter(p => p.kind === 'consumer' && p.depth <= 1 && !p.research); c.aiFocus = cons[Math.floor(rnd(s) * cons.length)].id; c.cash = Math.round(c.cash * 1.5); }
+  ensureEquity(c); c.price = c.priceHist![0] = Math.max(0.01, round2(c.cash / c.shares!)); if (c.isAI) { c.float = Math.round(c.shares! * 0.3); c.policy = { dividend: 25, invest: 0, target: 'facilities' }; } // AI companies are listed with 30% of the shares on the market
   s.companies.push(c);
   return c;
 }
@@ -90,6 +99,11 @@ export function cityWage(s: GameState, city: number): number {
   return Math.round(BASE_WAGE * c.wageIdx * (1 + Math.max(0, util - 0.5) * 0.8));
 }
 export const retailRef = (s: GameState, city: number, p: ProductId) => round2(PRODUCTS[p].basePrice * 1.42 * s.market[p].idx * s.cities[city].priceIdx);
+/** Hi-tech products need research before a company can manufacture them. */
+export const UNLOCK_RATE = 3; // an R&D building turns scientist-points into hi-tech unlock progress at this rate
+export const researchOf = (c: Company, p: ProductId): number => c.research?.[p] ?? 0;
+export const isUnlocked = (c: Company, p: ProductId): boolean => { const d = PRODUCTS[p]; return !d.research || researchOf(c, p) >= d.research; };
+export const canResearch = (c: Company, p: ProductId): boolean => { const d = PRODUCTS[p]; return !!d.research && !isUnlocked(c, p) && (!d.after || isUnlocked(c, d.after)); };
 /** Global market: takes leftovers at a discount, and its price sags as more of a good is dumped on it in one month. */
 export const WORLD_DISCOUNT = 0.8, WORLD_DROP = 0.4, WORLD_VOL = 15;
 export const worldPrice = (s: GameState, p: ProductId) => round2(PRODUCTS[p].basePrice * s.market[p].idx * WORLD_DISCOUNT);
@@ -288,6 +302,7 @@ const factoryExtra = (b: Building) => b.type === 'factory' ? moduleStats(b) : nu
 
 export function requiredWorkers(b: Building): number {
   if (b.type === 'rd') return Math.max(1, b.workers);
+  if (b.type === 'mall') return 0;
   if (b.type === 'store') return 2 + b.size * 2;
   if (b.type === 'factory' && b.layout) return Math.max(1, b.layout.reduce((n, c, i) => n + cellNeed(b, i), 0));
   const def = PRODUCTS[b.product ?? 'grain'];
@@ -301,7 +316,7 @@ export function slotCapacity(b: Building, p: ProductId): number { return Math.ro
 function moraleFactor(s: GameState, b: Building) { return clamp(0.55 + 0.45 * (b.wage / cityWage(s, b.city)), 0.55, 1.08); }
 export function efficiency(s: GameState, b: Building): number {
   const staff = b.type === 'factory' && b.layout ? 1 : staffFactor(b.workers, requiredWorkers(b));
-  return staff * moraleFactor(s, b) * (0.6 + 0.4 * b.condition / 100);
+  return staff * moraleFactor(s, b) * (0.6 + 0.4 * b.condition / 100) * (1 + mgrBonus(s, b).eff);
 }
 function seasonFactor(s: GameState, b: Building): number {
   let f = 1;
@@ -310,7 +325,21 @@ function seasonFactor(s: GameState, b: Building): number {
   return f;
 }
 export function companyBuildings(s: GameState, cid: string): Building[] { return Object.values(s.buildings).filter(b => b.owner === cid); }
+// ---- stock market
+export const TOTAL_SHARES = 1_000_000, SHARE_SPREAD = 0.01, SHARE_IMPACT = 0.25, MIN_OWN = 0.51;
+export function ensureEquity(c: Company) {
+  c.shares ??= TOTAL_SHARES; c.float ??= 0; c.price ??= 1; c.priceHist ??= [c.price]; c.portfolio ??= {}; c.policy ??= { dividend: 0, invest: 0, target: 'facilities' };
+}
+export const heldTotal = (s: GameState, c: Company): number => s.companies.reduce((n, o) => n + (o.portfolio?.[c.id] ?? 0), 0);
+export const treasury = (s: GameState, c: Company): number => (c.shares ?? TOTAL_SHARES) - (c.float ?? 0) - heldTotal(s, c);
+export const portfolioValue = (s: GameState, c: Company): number => Object.entries(c.portfolio ?? {}).reduce((n, [id, q]) => { const o = s.companies.find(x => x.id === id); return n + (o && !o.bankrupt ? q * (o.price ?? 1) : 0); }, 0);
+/** Net worth attributable to the company's own owners, plus the shares it holds in others. */
 export function netWorth(s: GameState, c: Company): number {
+  const eq = equity(s, c); const own = eq > 0 ? eq * treasury(s, c) / (c.shares ?? TOTAL_SHARES) : eq;
+  return Math.round(own + portfolioValue(s, c));
+}
+/** Book value of the company: cash + assets - debt (before sharing it with outside shareholders). */
+export function equity(s: GameState, c: Company): number {
   let v = c.cash - c.debt;
   for (const b of Object.values(s.buildings)) {
     if (b.owner !== c.id) continue;
@@ -322,6 +351,26 @@ export function netWorth(s: GameState, c: Company): number {
   }
   for (const l of Object.values(s.lots)) if (l.owner === c.id) v += l.paid * 0.9;
   return Math.round(v);
+}
+export const MAX_LOANS = 8;
+export const pledgedTo = (c: Company, bid: string): Loan | undefined => (c.loans ?? []).find(l => l.collateral.includes(bid));
+/** What a lender would accept as security for a building. */
+export const collateralValue = (b: Building): number => Math.round(b.invested * (0.6 + 0.4 * b.condition / 100));
+/** The credit a lender offers right now: its limit (grows with the pledged collateral), minimum, and the monthly rate. */
+export function loanOffer(s: GameState, c: Company, l: Lender, collateral: string[] = []) {
+  const pledged = collateral.reduce((n, id) => n + (s.buildings[id] ? collateralValue(s.buildings[id]) : 0), 0);
+  const secured = collateral.length > 0 && l.collateral !== 'none'; const scale = s.interest / 0.006;
+  const unsecured = l.collateral === 'required' ? 0 : l.base + l.nwFrac * Math.max(0, netWorth(s, c) + c.debt);
+  const owed = (c.loans ?? []).filter(x => x.lender === l.id).reduce((n, x) => n + x.principal, 0);
+  const total = Math.max(0, maxDebt(s, c) + 0.7 * pledged - c.debt);
+  const max = Math.max(0, Math.floor(Math.min(unsecured + (secured ? l.ltv * pledged : 0) - owed, total) / 1000) * 1000);
+  return { max, min: l.min, rate: (secured ? l.securedRate : l.rate) * scale, secured, pledged };
+}
+/** What a contract costs next month: interest plus the principal that falls due. */
+export function loanDue(L: Loan) {
+  const last = L.elapsed + 1 >= L.term;
+  const principal = Math.min(L.principal, last ? L.principal : L.type === 'amortizing' ? L.installment : 0);
+  return { interest: Math.round(L.principal * L.rate * (L.defaulted ? 2 : 1)), principal };
 }
 export const maxDebt = (s: GameState, c: Company) => Math.max(0, Math.round((300_000 + 0.6 * Math.max(0, netWorth(s, c) + c.debt)) / 10000) * 10000);
 export const overdraftLimit = (s: GameState, c: Company) => Math.round(150_000 + 0.2 * Math.max(0, netWorth(s, c)));
@@ -349,6 +398,7 @@ function newBuilding(s: GameState, c: Company, type: BuildingType, city: number,
     slots: [], invested: def.cost, builtTurn: s.turn, report: emptyReport(),
   };
   if (type === 'factory') ensureLayout(b);
+  if (type === 'mall') { b.rent = 10000; b.workers = 0; }
   if (type === 'store') for (let i = 0; i < STORE_SLOTS; i++) b.slots.push({ product: null, price: 0, order: 0, source: '', stock: emptyStock(), sold: 0, revenue: 0, lost: 0 });
   return b;
 }
@@ -378,9 +428,12 @@ export function applyAction(s: GameState, cid: string, a: Action): Res {
       const k = lotKey(a.idx); const lot = s.lots[k];
       if (lot && lot.owner !== cid) return err('Lot is owned by someone else');
       if (Object.values(s.buildings).some(b => b.idx === a.idx)) return err('Lot already built');
+      if (a.btype === 'mall' && s.cities[cityId].town) return err('Malls need a city: towns are too small');
+      if (a.btype === 'mall' && Object.values(s.buildings).filter(b => b.type === 'mall' && b.city === cityId).length >= MALL_PER_CITY) return err(`${s.cities[cityId].name} already has ${MALL_PER_CITY} malls`);
+      if (s.vacant?.some(v => v.idx === a.idx)) return err('A ready-built facility is for sale here: buy it instead (Real estate tab)');
       let product: ProductId | null = null;
       if (def.products) { product = a.product && def.products.includes(a.product) ? a.product : def.products[0]; }
-      else if (a.btype === 'factory') { if (!a.product || PRODUCTS[a.product]?.kind === 'raw' || !PRODUCTS[a.product]) return err('Choose a product to manufacture'); product = a.product; }
+      else if (a.btype === 'factory') { if (!a.product || PRODUCTS[a.product]?.kind === 'raw' || !PRODUCTS[a.product]) return err('Choose a product to manufacture'); if (!isUnlocked(c, a.product)) return err(PRODUCTS[a.product].name + ' is hi-tech: research it with an R&D building first'); product = a.product; }
       else if (a.btype === 'rd') product = a.product && PRODUCTS[a.product] ? a.product : 'bread';
       const landCost = lot ? 0 : lotPrice(s, a.idx);
       const total = landCost + def.cost;
@@ -390,11 +443,14 @@ export function applyAction(s: GameState, cid: string, a: Action): Res {
       const b = newBuilding(s, c, a.btype, cityId, a.idx, product);
       if (a.btype === 'store') b.slots[0].product = null;
       s.buildings[b.id] = b;
+      s.news.push({ turn: s.turn, kind: 'info', tag: 'opening', text: `${c.name} opens ${/^[aeiou]/i.test(def.name) ? 'an' : 'a'} ${def.name.toLowerCase()}${product && a.btype !== 'store' ? ' for ' + PRODUCTS[product].name.toLowerCase() : ''} in ${s.cities[cityId].name}.` });
       fillStaff(s, cid, b);
       return { ok: true, info: b.id };
     }
     case 'sellBuilding': {
       const b = own(a.id); if (!b) return err('Not your building');
+      if (pledgedTo(c, b.id)) return err('This facility is pledged as collateral: repay the loan first');
+      if (b.type === 'mall' && Object.values(s.buildings).some(x => x.mall === b.id)) return err('Tenants still hold leases in this mall');
       c.cash += Math.round(b.invested * 0.4);
       delete s.buildings[b.id];
       for (const o of Object.values(s.buildings)) for (const [p, src] of Object.entries(o.sources)) if (src === b.id || src.startsWith(b.id + '#')) o.sources[p as ProductId] = '';
@@ -410,9 +466,10 @@ export function applyAction(s: GameState, cid: string, a: Action): Res {
     case 'setProduct': {
       const b = own(a.id); if (!b) return err('Not your building');
       const def = BUILDINGS[b.type];
-      if (b.type === 'store') return err('Stores use shelf slots');
+      if (b.type === 'store' || b.type === 'mall') return err('Stores use shelf slots');
       if (def.products && !def.products.includes(a.product)) return err('This building cannot produce that');
       if (b.type === 'factory' && (!PRODUCTS[a.product] || PRODUCTS[a.product].kind === 'raw')) return err('Factories make manufactured goods');
+      if (b.type === 'factory' && !isUnlocked(c, a.product)) return err(PRODUCTS[a.product].name + ' is hi-tech: research it first');
       if (a.product === b.product) return OK;
       if (b.type === 'factory') { const cost = Math.round(def.cost * 0.15 * b.lines); if (!canPay(cost)) return err('Cannot afford retooling'); pay(cost); b.inputs = {}; b.sources = {}; }
       const oldP = b.product; b.product = a.product; b.stock = emptyStock();
@@ -438,7 +495,7 @@ export function applyAction(s: GameState, cid: string, a: Action): Res {
     case 'setTarget': { const b = own(a.id); if (!b) return err('Not your building'); b.target = Math.round(num(a.pct, 0, 100)); return OK; }
     case 'setMaint': { const b = own(a.id); if (!b) return err('Not your building'); b.maint = Math.round(num(a.pct, 0, 200)); return OK; }
     case 'setWorldSell': {
-      const b = own(a.id); if (!b || b.type === 'store' || b.type === 'rd') return err('This building has nothing to sell');
+      const b = own(a.id); if (!b || b.type === 'store' || b.type === 'rd' || b.type === 'mall') return err('This building has nothing to sell');
       if (a.cell !== undefined) { ensureLayout(b); const cl = b.layout?.[a.cell]; if (!cl || cl.m !== 'export') return err('Only export cells can sell to the world market'); cl.world = !!a.on; }
       else b.world = !!a.on;
       return OK;
@@ -476,6 +533,7 @@ export function applyAction(s: GameState, cid: string, a: Action): Res {
       if (cell.m === 'line') {
         if (a.product !== undefined) {
           if (!a.product || !PRODUCTS[a.product] || PRODUCTS[a.product].kind === 'raw') return err('Production lines manufacture goods, not raw materials');
+          if (!isUnlocked(c, a.product)) return err(PRODUCTS[a.product].name + ' is hi-tech: research it first');
           cell.product = a.product;
         }
       } else if (cell.m === 'export') {
@@ -516,21 +574,21 @@ export function applyAction(s: GameState, cid: string, a: Action): Res {
       b.links = [...set]; syncLayout(b); return OK;
     }
     case 'addLine': {
-      const b = own(a.id); if (!b || b.type === 'store' || b.type === 'rd') return err('Cannot expand that');
+      const b = own(a.id); if (!b || b.type === 'store' || b.type === 'rd' || b.type === 'mall') return err('Cannot expand that');
       if (b.type === 'factory') return err('Use the facility layout to add production lines');
       if (b.lines >= MAX_LINES) return err('Maximum lines reached');
       const cost = Math.round(BUILDINGS[b.type].cost * 0.6);
       if (!canPay(cost)) return err(`Need ${fmtMoney(cost)}`); pay(cost); b.lines++; b.invested += cost; return OK;
     }
     case 'upgradeAuto': {
-      const b = own(a.id); if (!b || b.type === 'store' || b.type === 'rd') return err('Cannot automate that');
+      const b = own(a.id); if (!b || b.type === 'store' || b.type === 'rd' || b.type === 'mall') return err('Cannot automate that');
       if (b.type === 'factory') return err('Place robotics next to a line in the facility layout');
       if (b.auto >= MAX_AUTO) return err('Fully automated');
       const cost = Math.round(BUILDINGS[b.type].cost * 0.4 * (b.auto + 1)); if (!canPay(cost)) return err(`Need ${fmtMoney(cost)}`);
       pay(cost); b.auto++; b.invested += cost; return OK;
     }
     case 'upgradeSize': {
-      const b = own(a.id); if (!b || b.type !== 'store') return err('Only stores can be enlarged');
+      const b = own(a.id); if (!b || b.type !== 'store') return err('Only stores can be enlarged'); if (b.mall) return err('Mall units cannot be enlarged');
       if (b.size >= MAX_STORE_SIZE) return err('Maximum size');
       const cost = Math.round(BUILDINGS.store.cost * 0.5 * b.size); if (!canPay(cost)) return err(`Need ${fmtMoney(cost)}`);
       pay(cost); b.size++; b.invested += cost; return OK;
@@ -538,6 +596,7 @@ export function applyAction(s: GameState, cid: string, a: Action): Res {
     case 'setSlot': {
       const b = own(a.id); if (!b || b.type !== 'store') return err('Not your store');
       const sl = b.slots[a.slot]; if (!sl) return err('Bad slot');
+      if (b.mall && a.product && c.brand[a.product] < MALL_MIN_BRAND) return err('Mall units only sell branded products: build up the brand of ' + PRODUCTS[a.product].name + ' to ' + MALL_MIN_BRAND + ' first (advertising / branding studios)');
       if (a.product && PRODUCTS[a.product]?.kind !== 'consumer') return err('Stores only sell consumer goods');
       if (a.product && b.slots.some((o, i) => i !== a.slot && o.product === a.product)) return err('Product already on another shelf');
       if (a.product && a.source && (a.source !== sl.source || a.product !== sl.product)) { const e2 = sourceError(s, cid, a.product, a.source); if (e2) return err(e2); }
@@ -547,14 +606,98 @@ export function applyAction(s: GameState, cid: string, a: Action): Res {
     }
     case 'setAds': { c.ads[a.product] = Math.round(num(a.budget, 0, 1_000_000)); return OK; }
     case 'rename': { const b = own(a.id); if (!b) return err('Not your building'); b.name = String(a.name).slice(0, 40) || b.name; return OK; }
-    case 'borrow': {
-      const amt = Math.round(num(a.amount, 0, 1e9)); if (amt <= 0) return err('Enter an amount');
-      if (c.debt + amt > maxDebt(s, c)) return err(`Credit limit is ${fmtMoney(maxDebt(s, c))}`);
-      c.debt += amt; c.cash += amt; return OK;
+    case 'buyShares': case 'sellShares': {
+      const t = s.companies.find(x => x.id === a.company); if (!t || t.bankrupt) return err('No such listed company'); if (t.id === c.id) return err('Use issue / buy back for your own shares');
+      ensureEquity(t); ensureEquity(c); const q = Math.floor(num(a.qty, 0, 1e9)); if (q < 1) return err('Enter a number of shares');
+      const imp = SHARE_IMPACT * q / t.shares!;
+      if (a.type === 'buyShares') {
+        if (q > t.float!) return err('Only ' + Math.floor(t.float!).toLocaleString('en-US') + ' shares of ' + t.name + ' are for sale');
+        const px = t.price! * (1 + imp), cost = Math.round(q * px * (1 + SHARE_SPREAD)); if (c.cash < cost) return err('Need ' + fmtMoney(cost));
+        c.cash -= cost; t.float! -= q; c.portfolio![t.id] = (c.portfolio![t.id] ?? 0) + q; t.price = px;
+      } else {
+        const have = c.portfolio![t.id] ?? 0; if (q > have) return err('You only hold ' + Math.floor(have).toLocaleString('en-US') + ' shares');
+        const px = Math.max(0.01, t.price! * (1 - imp)); c.cash += Math.round(q * px * (1 - SHARE_SPREAD)); t.float! += q; c.portfolio![t.id] = have - q; if (c.portfolio![t.id] <= 0) delete c.portfolio![t.id]; t.price = px;
+      }
+      return OK;
     }
-    case 'repay': {
-      const amt = Math.round(Math.min(num(a.amount, 0, 1e9), c.debt)); if (amt <= 0) return err('Nothing to repay');
-      if (c.cash < amt) return err('Not enough cash'); c.cash -= amt; c.debt -= amt; return OK;
+    case 'issueShares': case 'buybackShares': {
+      ensureEquity(c); const q = Math.floor(num(a.qty, 0, 1e9)); if (q < 1) return err('Enter a number of shares'); const imp = SHARE_IMPACT * q / c.shares!;
+      if (a.type === 'issueShares') {
+        if (treasury(s, c) - q < MIN_OWN * c.shares!) return err('You must keep at least ' + Math.round(MIN_OWN * 100) + '% of your own shares (you can sell ' + Math.max(0, Math.floor(treasury(s, c) - MIN_OWN * c.shares!)).toLocaleString('en-US') + ' more)');
+        const px = Math.max(0.01, c.price! * (1 - imp)); c.cash += Math.round(q * px * 0.97); c.float! += q; c.price = px; // 3% underwriting fee
+      } else {
+        if (q > c.float!) return err('Only ' + Math.floor(c.float!).toLocaleString('en-US') + ' of your shares are on the market');
+        const px = c.price! * (1 + imp), cost = Math.round(q * px * (1 + SHARE_SPREAD)); if (c.cash < cost) return err('Need ' + fmtMoney(cost));
+        c.cash -= cost; c.float! -= q; c.price = px;
+      }
+      return OK;
+    }
+    case 'buyVacant': {
+      const vs = (s.vacant ??= []); const i = vs.findIndex(x => x.id === a.id); if (i < 0) return err('That property is no longer for sale');
+      const v = vs[i]; if (s.lots[lotKey(v.idx)] || Object.values(s.buildings).some(b => b.idx === v.idx)) { vs.splice(i, 1); return err('That property was taken'); }
+      const total = v.land + v.build; if (!canPay(total)) return err(`Not enough cash (need ${fmtMoney(total)})`);
+      pay(total); s.lots[lotKey(v.idx)] = { owner: cid, paid: v.land };
+      const b = newBuilding(s, c, v.type, v.city, v.idx, v.product); b.condition = v.cond; b.invested = v.build; s.buildings[b.id] = b; vs.splice(i, 1);
+      s.news.push({ turn: s.turn, kind: 'info', tag: 'opening', text: `${c.name} takes over ${/^[aeiou]/i.test(BUILDINGS[v.type].name) ? 'an' : 'a'} ${BUILDINGS[v.type].name.toLowerCase()}${v.product && v.type !== 'store' ? ' for ' + PRODUCTS[v.product].name.toLowerCase() : ''} in ${s.cities[v.city].name}.` });
+      fillStaff(s, cid, b); return { ok: true, info: b.id };
+    }
+    case 'setRent': {
+      const b = own(a.id); if (!b || b.type !== 'mall') return err('Not your mall'); b.rent = Math.round(num(a.rent, 500, 200000)); return OK;
+    }
+    case 'rentUnit': {
+      const m = s.buildings[a.id]; if (!m || m.type !== 'mall') return err('No such mall'); const mo = s.companies.find(x => x.id === m.owner); if (!mo || mo.bankrupt) return err('The mall is closed');
+      const p = PRODUCTS[a.product]; if (!p || p.kind !== 'consumer') return err('Malls only host consumer goods');
+      if (c.brand[a.product] < MALL_MIN_BRAND) return err('Mall units only sell branded products: build up the brand of ' + p.name + ' to ' + MALL_MIN_BRAND + ' first (advertising / branding studios)');
+      const units = Object.values(s.buildings).filter(x => x.mall === m.id);
+      if (units.length >= MALL_UNITS) return err('The mall is full');
+      if (units.some(x => x.owner === cid && x.slots[0]?.product === a.product)) return err('You already sell ' + p.name.toLowerCase() + ' in this mall');
+      if (!canPay(MALL_FITOUT)) return err('Need ' + fmtMoney(MALL_FITOUT) + ' for the shop fit-out');
+      pay(MALL_FITOUT);
+      const u = newBuilding(s, c, 'store', m.city, m.idx, null); u.mall = m.id; u.rent = m.owner === cid ? 0 : m.rent ?? 10000; u.leaseEnd = s.turn + MALL_LEASE; u.invested = MALL_FITOUT; u.size = 1; u.slots.length = 1;
+      u.name = `${p.name} shop · ${m.name}`; u.slots[0] = { ...u.slots[0], product: a.product, price: round2(retailRef(s, m.city, a.product)), order: 0, source: '' };
+      s.buildings[u.id] = u; fillStaff(s, cid, u);
+      if (m.owner !== cid) s.news.push({ turn: s.turn, kind: 'info', tag: 'opening', text: `${c.name} rents a unit in ${m.name} (${s.cities[m.city].name}) to sell ${p.name.toLowerCase()}.` });
+      return { ok: true, info: u.id };
+    }
+    case 'hire': {
+      const pool = (s.candidates ??= []); const i = pool.findIndex(x => x.id === a.id); if (i < 0) return err('That candidate is no longer available');
+      const p = pool[i]; const staff = (c.staff ??= []); const n = staff.filter(x => x.kind === p.kind).length;
+      if (n >= MAX_STAFF[p.kind]) return err('You can employ at most ' + MAX_STAFF[p.kind] + (p.kind === 'manager' ? ' managers' : ' advisor') + '. Fire someone first.');
+      if (c.cash < p.salary * 2) return err('Keep at least two months of salary in cash to hire ' + p.name);
+      pool.splice(i, 1); p.hiredTurn = s.turn; p.assigned = null; staff.push(p); return OK;
+    }
+    case 'fire': {
+      const staff = c.staff ?? []; const i = staff.findIndex(x => x.id === a.id); if (i < 0) return err('No such employee');
+      const p = staff[i]; c.cash -= p.salary; c.ledger.wages += p.salary; staff.splice(i, 1); return OK; // one month severance
+    }
+    case 'assign': {
+      const p = (c.staff ?? []).find(x => x.id === a.id); if (!p || p.kind !== 'manager') return err('Only managers can be assigned to a facility');
+      if (a.building) { const b = own(a.building); if (!b) return err('Not your building'); for (const o of c.staff ?? []) if (o.assigned === b.id) o.assigned = null; p.assigned = b.id; } else p.assigned = null;
+      return OK;
+    }
+    case 'setPolicy': {
+      ensureEquity(c); const d = Math.round(num(a.dividend, 0, 100)), i = Math.round(num(a.invest, 0, 100)); if (d + i > 100) return err('Dividends and investment cannot exceed 100% of the profit');
+      if (!['facilities', 'rd', 'debt'].includes(a.target)) return err('Unknown investment target'); c.policy = { dividend: d, invest: i, target: a.target }; return OK;
+    }
+    case 'takeLoan': {
+      const lender = LENDERS.find(l => l.id === a.lender); if (!lender) return err('Unknown lender');
+      const loans = (c.loans ??= []); if (loans.length >= MAX_LOANS) return err('At most ' + MAX_LOANS + ' open loans');
+      const amt = Math.round(num(a.amount, 0, 1e9)), term = Math.round(+a.term); if (!lender.terms.includes(term)) return err('Choose one of the offered terms');
+      const col = [...new Set(a.collateral ?? [])]; for (const id of col) { const b = own(id); if (!b) return err('You can only pledge your own buildings'); if (pledgedTo(c, id)) return err(b.name + ' is already pledged to another loan'); }
+      if (col.length && lender.collateral === 'none') return err(lender.name + ' does not accept collateral');
+      if (lender.collateral === 'required' && !col.length) return err(lender.name + ' only lends against collateral');
+      const o = loanOffer(s, c, lender, col); if (amt < lender.min) return err('Minimum loan is ' + fmtMoney(lender.min));
+      if (amt > o.max) return err('This lender offers at most ' + fmtMoney(o.max) + ' right now');
+      c.debt += amt; c.cash += amt;
+      loans.push({ id: 'L' + s.nextId++, lender: lender.id, original: amt, principal: amt, rate: o.rate, type: lender.type, term, elapsed: 0, startTurn: s.turn, installment: Math.ceil(amt / term), collateral: col, late: 0 });
+      return OK;
+    }
+    case 'repayLoan': {
+      const L = (c.loans ?? []).find(x => x.id === a.id); if (!L) return err('No such loan');
+      const amt = Math.round(Math.min(num(a.amount, 0, 1e9), L.principal)); if (amt <= 0) return err('Nothing to repay');
+      if (c.cash < amt) return err('Not enough cash'); c.cash -= amt; c.debt -= amt; L.principal -= amt;
+      if (L.principal <= 0) c.loans = c.loans!.filter(x => x !== L); else if (L.type === 'amortizing') L.installment = Math.ceil(L.principal / Math.max(1, L.term - L.elapsed));
+      return OK;
     }
   }
   return err('Unknown action');
@@ -654,6 +797,8 @@ export function processTurn(s: GameState) {
 
   updateMarket(s);
   refreshHarbours(s);
+  refreshCandidates(s);
+  spawnVacancies(s);
   for (const c of live) if (c.isAI) aiTurn(s, c);
 
   // production tiers: raw first, then deeper recipes
@@ -672,6 +817,14 @@ export function processTurn(s: GameState) {
   for (const b of Object.values(s.buildings)) if (b.type === 'rd' && b.product) {
     const c = s.companies.find(x => x.id === b.owner)!;
     const pts = b.workers * 0.15 * moraleFactor(s, b) * (0.6 + 0.4 * b.condition / 100);
+    const P = PRODUCTS[b.product];
+    if (P.research && !isUnlocked(c, b.product)) { // a hi-tech project: points go into unlocking the product instead of its tech level
+      if (!canResearch(c, b.product)) { b.report.produced = 0; b.report.note = `${P.name} cannot be researched until ${PRODUCTS[P.after!].name} is unlocked.`; continue; }
+      c.research ??= {}; const gain = pts * UNLOCK_RATE; c.research[b.product] = Math.min(P.research, researchOf(c, b.product) + gain); b.report.produced = round2(gain);
+      if (isUnlocked(c, b.product)) { b.report.note = `${P.name} developed! You can now manufacture it.`; s.news.push({ turn: s.turn, kind: 'good', tag: 'product', text: `${c.name} has developed ${P.name} and can now manufacture it.` }); }
+      else b.report.note = `Developing ${P.name}: ${Math.round(researchOf(c, b.product))} / ${P.research} points (+${gain.toFixed(1)}).`;
+      continue;
+    }
     const before = c.tech[b.product];
     c.tech[b.product] = Math.min(100, before + pts * (1 - before / 110));
     b.report.produced = round2(c.tech[b.product] - before);
@@ -686,6 +839,7 @@ export function processTurn(s: GameState) {
   }
 
   // accounting
+  collectRents(s);
   for (const c of live) closeBooks(s, c);
 
   // cities
@@ -714,11 +868,72 @@ function sellWorld(s: GameState) {
     if (b.world && b.product) sell(b, b.product, b.stock);
     b.layout?.forEach(c => { if (c.m === 'export' && c.world && c.product && c.stock) sell(b, c.product, c.stock); });
   }
+  s.worldSold = used;
+}
+
+function updatePrice(s: GameState, c: Company) {
+  ensureEquity(c);
+  const recent = c.history.slice(-6), avg = recent.length ? recent.reduce((n, p) => n + p.profit, 0) / recent.length : 0;
+  const target = Math.max(0.01, (Math.max(0, equity(s, c)) + 24 * Math.max(0, avg)) / c.shares!);
+  c.price = Math.max(0.01, round2(c.price! + (target - c.price!) * 0.3 + c.price! * rr(s, -0.02, 0.02)));
+  c.priceHist!.push(c.price); if (c.priceHist!.length > 120) c.priceHist!.shift();
+}
+/** December: split the year's profit between dividends to outside shareholders, investment, and the cash reserve. */
+function fiscalYearEnd(s: GameState, c: Company) {
+  ensureEquity(c); const pol = c.policy!; const profit = Math.max(0, c.history.slice(-12).reduce((n, p) => n + p.profit, 0));
+  let div = Math.min(profit * pol.dividend / 100, Math.max(0, c.cash)); let paid = 0;
+  const outside = treasury(s, c) < c.shares! ? c.shares! - treasury(s, c) : 0;
+  if (div > 0 && outside > 0) {
+    const dps = div / outside; c.lastDps = round2(dps);
+    for (const o of s.companies) { const q = o.portfolio?.[c.id] ?? 0; if (q > 0 && !o.bankrupt) { const amt = Math.round(q * dps); o.cash += amt; paid += amt; o.news.push({ turn: s.turn, text: `Dividend from ${c.name}: ${fmtMoney(amt)} (${dps.toFixed(3)} per share).` }); } }
+    c.cash -= paid; if (paid > 0) s.news.push({ turn: s.turn, kind: 'good', tag: 'market', text: `${c.name} pays shareholders ${fmtMoney(paid)} in dividends for the year (${dps.toFixed(3)} per share).` });
+  }
+  let inv = Math.min(profit * pol.invest / 100, Math.max(0, c.cash)); let spent = 0;
+  if (inv > 0) {
+    if (pol.target === 'facilities') { const mine = companyBuildings(s, c.id); const tot = mine.reduce((n, b) => n + b.invested, 0); if (tot > 0) for (const b of mine) { const part = inv * b.invested / tot; b.condition = Math.min(100, b.condition + part / Math.max(1, b.invested) * 100); b.invested += Math.round(part); spent += part; } }
+    else if (pol.target === 'rd') { const ps = [...new Set(companyBuildings(s, c.id).map(b => b.product).filter((p): p is ProductId => !!p && b0(p)))]; for (const p of ps) { c.tech[p] = Math.min(100, c.tech[p] + inv / ps.length / 60_000); } if (ps.length) spent = inv; }
+    else { for (const L of [...(c.loans ?? [])].sort((x, y) => y.rate - x.rate)) { const pay = Math.min(L.principal, inv - spent); if (pay <= 0) break; L.principal -= pay; c.debt -= pay; spent += pay; if (L.principal <= 0) c.loans = c.loans!.filter(x => x !== L); } }
+    c.cash -= Math.round(spent);
+  }
+  c.lastYear = { profit: Math.round(profit), dividends: paid, invested: Math.round(spent), target: pol.target };
+  c.news.push({ turn: s.turn, text: `Fiscal year closed: profit ${fmtMoney(profit)}; ${fmtMoney(paid)} paid as dividends, ${fmtMoney(spent)} invested${spent ? ' (' + pol.target + ')' : ''}, the rest stays in the bank.` });
+}
+const b0 = (p: ProductId) => !!PRODUCTS[p];
+/** Monthly loan servicing: pay what falls due, or miss it (3 misses in a row = the lender seizes the collateral). Returns the interest + fees for the ledger. */
+function serviceLoans(s: GameState, c: Company): number {
+  let cost = 0;
+  for (const L of [...(c.loans ?? [])]) {
+    const d = loanDue(L); const lender = LENDERS.find(x => x.id === L.lender)!; cost += d.interest;
+    if (c.cash - d.principal >= -overdraftLimit(s, c)) { c.cash -= d.principal; c.debt -= d.principal; L.principal -= d.principal; L.late = 0; }
+    else if (d.principal > 0) {
+      L.late++; const fee = Math.round(d.principal * 0.03); cost += fee;
+      c.news.push({ turn: s.turn, text: `Missed a payment of ${fmtMoney(d.principal)} to ${lender.name}${L.late >= 3 ? '.' : ` (${L.late}/3, fee ${fmtMoney(fee)}).`}` });
+      if (L.late >= 3) foreclose(s, c, L, lender);
+    }
+    L.elapsed++;
+    if (L.principal <= 0) { c.loans = c.loans!.filter(x => x !== L); c.news.push({ turn: s.turn, text: `Loan from ${lender.name} fully repaid.` }); }
+  }
+  return cost;
+}
+function foreclose(s: GameState, c: Company, L: Loan, lender: Lender) {
+  let got = 0;
+  for (const id of L.collateral) { const b = s.buildings[id]; if (!b) continue; got += Math.round(collateralValue(b) * 0.6); removeBuilding(s, b); }
+  const paid = Math.min(L.principal, got); L.principal -= paid; c.debt -= paid; c.cash += got - paid;
+  s.news.push({ turn: s.turn, kind: 'bad', text: `${lender.name} seized ${L.collateral.length ? L.collateral.length + ' facilities' : 'no collateral'} from ${c.name} after missed payments.` });
+  c.news.push({ turn: s.turn, text: `${lender.name} foreclosed${L.collateral.length ? ' on your pledged facilities' : ''} and recovered ${fmtMoney(paid)}.${L.principal > 0 ? ' The rest (' + fmtMoney(L.principal) + ') is restructured at double interest over 12 months.' : ''}` });
+  L.collateral = []; L.late = 0;
+  if (L.principal <= 0) { c.loans = c.loans!.filter(x => x !== L); return; }
+  Object.assign(L, { defaulted: true, type: 'amortizing', term: 12, elapsed: 0, startTurn: s.turn, original: L.principal, installment: Math.ceil(L.principal / 12) });
+}
+function removeBuilding(s: GameState, b: Building) {
+  delete s.buildings[b.id];
+  for (const o of Object.values(s.buildings)) for (const [p, src] of Object.entries(o.sources)) if (src === b.id || src.startsWith(b.id + '#')) o.sources[p as ProductId] = '';
+  for (const o of Object.values(s.buildings)) for (const sl of o.slots) if (sl.source === b.id || sl.source.startsWith(b.id + '#')) sl.source = '';
 }
 
 function updateMarket(s: GameState) {
   for (const p of PRODUCT_LIST) {
-    const m = s.market[p.id];
+    const m = s.market[p.id]; m.prev = m.idx;
     m.idx = clamp(m.idx + (1 - m.idx) * 0.12 + rr(s, -0.03, 0.03), 0.6, 1.8);
     m.demand = 1;
   }
@@ -738,7 +953,7 @@ function updateMarket(s: GameState) {
     else if (roll < 0.95) { s.market.steel.idx *= 1.2; push('Steelworkers strike: steel prices up 20%.', 'bad'); }
     else { for (const p of PRODUCT_LIST) s.market[p.id].idx *= 0.92; push('Global glut: prices fall across the board.', 'info'); }
   }
-  s.news = s.news.slice(-60);
+  s.news = s.news.slice(-150);
 }
 
 /** Factory production over the layout graph: lines pull their recipe inputs from linked import cells or linked lines. */
@@ -807,7 +1022,7 @@ function produce(s: GameState, b: Building) {
   b.stock.qty *= 1 - def.spoil * (1 - 0.2 * Math.min(3, fx?.warehouse ?? 0));
   for (const [p, st] of Object.entries(b.inputs)) st!.qty *= 1 - PRODUCTS[p as ProductId].spoil;
   for (const c of b.layout ?? []) if ((c.m === 'warehouse' || c.m === 'export') && c.stock && c.product) c.stock.qty *= 1 - PRODUCTS[c.product].spoil * 0.5;
-  const eff = efficiency(s, b) * seasonFactor(s, b);
+  const eff = efficiency(s, b) * seasonFactor(s, b) * (1 + mgrBonus(s, b).prod);
   const storage = PRODUCTS[b.product!].cap * b.lines * 2.5 * (1 + 0.5 * (fx?.warehouse ?? 0));
   if (b.type === 'factory') {
     let note = produceFactory(s, b, c, eff, fx!, storage);
@@ -867,7 +1082,8 @@ function retail(s: GameState) {
         sl.sold = sl.revenue = sl.lost = 0;
         if (sl.stock.qty < 0.5 || sl.price <= 0) continue;
         const brand = c.brand[p.id];
-        const attr = Math.pow(refP / sl.price, 2.2) * Math.pow(0.4 + sl.stock.q / 80, 1.3) * (1 + brand / 60) * terr(b.idx) * (0.5 + 0.5 * staffEff);
+        const mallB = b.mall ? MALL_TRAFFIC * (0.8 + 0.2 * (s.buildings[b.mall]?.condition ?? 100) / 100) : 1;
+        const attr = Math.pow(refP / sl.price, 2.2) * Math.pow(0.4 + sl.stock.q / 80, 1.3) * (1 + brand / (b.mall ? 60 / MALL_BRAND_BOOST : 60)) * terr(b.idx) * mallB * (0.5 + 0.5 * staffEff);
         es.push({ sl, b, price: sl.price, attr, cap: Math.min(sl.stock.qty, slotCapacity(b, p.id) * Math.max(0.1, staffEff) * 1.3), sold: 0 });
       }
       const npc: E = { price: refP * NPC_SHARE_MARKUP, attr: Math.pow(1 / NPC_SHARE_MARKUP, 2.2) * Math.pow(0.4 + 40 / 80, 1.3) * 1.15, cap: Infinity, sold: 0 };
@@ -888,6 +1104,7 @@ function retail(s: GameState) {
         const sl = e.sl!, b = e.b!, c = s.companies.find(x => x.id === b.owner)!;
         const n = Math.min(e.sold, sl.stock.qty); sl.stock.qty -= n;
         sl.sold = Math.round(n * 10) / 10; sl.revenue = n * sl.price; sl.lost = Math.max(0, Math.round(remaining > 0 ? remaining / Math.max(1, es.length) : 0));
+        if (n >= 0.5 && sl.product) { const k = c.id + ':' + sl.product; s.sold ??= {}; if (!s.sold[k]) { s.sold[k] = 1; s.news.push({ turn: s.turn, kind: 'good', tag: 'product', text: `${c.name} starts selling ${PRODUCTS[sl.product].name.toLowerCase()} in ${s.cities[b.city].name}.` }); } }
         c.cash += sl.revenue; c.ledger.revenue += sl.revenue; b.report.revenue += sl.revenue; b.report.sold += n; b.report.produced += 0;
       }
     }
@@ -900,17 +1117,19 @@ function closeBooks(s: GameState, c: Company) {
   for (const b of Object.values(s.buildings)) {
     if (b.owner !== c.id) continue;
     const def = BUILDINGS[b.type];
-    const wages = b.workers * b.wage; const maint = Math.round(b.invested * def.maintPct / 100 * b.maint / 100);
-    L.wages += wages; L.maint += maint; b.report.wages = wages; b.report.maint = maint;
+    const mb = mgrBonus(s, b); const wages = Math.round(b.workers * b.wage * (1 - mb.exp)); const maint = Math.round(b.invested * def.maintPct / 100 * b.maint / 100 * (1 - mb.exp));
+    L.wages += wages; L.maint += maint; b.report.wages = wages; b.report.maint = maint + (b.mall ? b.rent ?? 0 : 0);
     b.hist = [...(b.hist ?? []), Math.round(b.report.revenue - b.report.purchases - wages - maint)].slice(-12);
     b.condition = clamp(b.condition + (b.maint / 100) * 2.5 - 2, 0, 100);
     const wr = b.wage / cityWage(s, b.city);
     if (wr < 0.9 && b.workers > 0) { const quit = Math.floor(b.workers * (0.9 - wr) * 0.6 + rnd(s)); if (quit > 0) { if (b.type === 'factory' && b.layout) removeWorkers(b, quit); else b.workers = Math.max(0, b.workers - quit); b.report.note += ` ${quit} workers quit over low pay.`; } }
   }
+  for (const m of c.staff ?? []) L.wages += m.salary;
   for (const [p, budget] of Object.entries(c.ads) as [ProductId, number][]) L.ads += budget;
   for (const p of PRODUCT_LIST) c.brand[p.id] = Math.min(100, c.brand[p.id] * 0.92 + 0.8 * Math.sqrt((c.ads[p.id] ?? 0) / 100));
   for (const b of Object.values(s.buildings)) if (b.owner === c.id && b.type === 'factory' && b.product) c.brand[b.product] = Math.min(100, c.brand[b.product] + 2 * moduleStats(b).brand);
-  L.interest = Math.round(c.debt * s.interest + Math.max(0, -c.cash) * 0.02 - Math.max(0, c.cash) * 0.0025);
+  const loanInterest = serviceLoans(s, c);
+  L.interest = Math.round(loanInterest + Math.max(0, -c.cash) * 0.02 - Math.max(0, c.cash) * 0.0025);
   const pretax = L.revenue - L.purchases - L.transport - L.wages - L.maint - L.ads - L.interest;
   let taxable = pretax - c.lossCarry; c.lossCarry = 0;
   if (taxable < 0) { c.lossCarry = -taxable; taxable = 0; }
@@ -921,11 +1140,13 @@ function closeBooks(s: GameState, c: Company) {
   const nw = netWorth(s, c);
   c.history.push({ turn: s.turn, cash: c.cash, netWorth: nw, revenue: Math.round(L.revenue), profit: Math.round(L.profit), debt: c.debt });
   if (c.history.length > 240) c.history.shift();
+  updatePrice(s, c);
+  if (s.turn % 12 === 11) fiscalYearEnd(s, c);
   if (c.cash < -overdraftLimit(s, c) * 0.95) c.news.push({ turn: s.turn, text: 'You are at your overdraft limit! Purchases are being refused.' });
   if (nw < 0) c.negMonths++; else c.negMonths = 0;
   if (c.negMonths >= 3) {
     c.bankrupt = true;
-    for (const b of Object.values(s.buildings)) if (b.owner === c.id) delete s.buildings[b.id];
+    for (const b of Object.values(s.buildings)) if (b.owner === c.id && (b.mall || !s.buildings[b.id])) delete s.buildings[b.id]; else if (b.owner === c.id) { s.vacant ??= []; s.vacant.push({ id: 'v' + s.nextId++, type: b.type, city: b.city, idx: b.idx, product: b.product, cond: Math.round(b.condition), land: s.lots[lotKey(b.idx)]?.paid ?? lotPrice(s, b.idx), build: Math.round(b.invested * 0.5 / 100) * 100, listedTurn: s.turn, origin: 'bankrupt' }); delete s.buildings[b.id]; }
     for (const [k, l] of Object.entries(s.lots)) if (l.owner === c.id) delete s.lots[k];
     s.news.push({ turn: s.turn, text: `${c.name} has gone bankrupt and its assets were liquidated!`, kind: 'bad' });
   }
@@ -1009,7 +1230,7 @@ function aiTurn(s: GameState, c: Company) {
   aiManage(s, c);
   if (s.turn % 2 !== 0 || c.cash < 430_000) return;
   const mine = companyBuildings(s, c.id);
-  if (c.cash > 3_000_000 && mine.length >= 5 && s.turn % 12 === 0) { const cons = PRODUCT_LIST.filter(p => p.kind === 'consumer'); c.aiFocus = cons[Math.floor(rnd(s) * cons.length)].id; }
+  if (c.cash > 3_000_000 && mine.length >= 5 && s.turn % 12 === 0) { const cons = PRODUCT_LIST.filter(p => p.kind === 'consumer' && !p.research); c.aiFocus = cons[Math.floor(rnd(s) * cons.length)].id; }
   const chain = chainOf(c.aiFocus!);
   // fill gaps in the supply chain first
   for (const p of chain) {
@@ -1049,4 +1270,128 @@ function aiTurn(s: GameState, c: Company) {
 // ---------------------------------------------------------------- views
 export function rankings(s: GameState) {
   return s.companies.filter(c => !c.bankrupt).map(c => ({ id: c.id, name: c.name, netWorth: netWorth(s, c) })).sort((a, b) => b.netWorth - a.netWorth);
+}
+
+// ---------------------------------------------------------------- personnel
+export const MAX_STAFF = { manager: 2, advisor: 1 };
+export const ADVISOR_SPECS: Record<string, string> = { market: 'Market analyst', finance: 'Financial advisor', production: 'Operations consultant', intel: 'Competitive intelligence' };
+const FIRST = ['Alice', 'Bruno', 'Carla', 'Dmitri', 'Elena', 'Farid', 'Grace', 'Hiro', 'Ines', 'Jonas', 'Kofi', 'Lena', 'Marco', 'Nadia', 'Oscar', 'Priya', 'Quinn', 'Rosa', 'Sven', 'Tara', 'Umar', 'Vera', 'Walt', 'Yara', 'Zed'];
+const LAST = ['Ashford', 'Brandt', 'Castillo', 'Dvorak', 'Eriksen', 'Fontaine', 'Gallagher', 'Hartmann', 'Ibarra', 'Jansen', 'Kowalski', 'Lindqvist', 'Moreau', 'Nakamura', 'Okafor', 'Petrov', 'Quist', 'Rossi', 'Santos', 'Tanaka', 'Ullman', 'Voss', 'Whitlock', 'Yilmaz'];
+const MGR_SPECS: BuildingType[] = ['farm', 'forest', 'mine', 'oil', 'factory', 'store', 'rd'];
+function makePerson(s: GameState, kind: 'manager' | 'advisor'): Person {
+  const stat = () => clamp(Math.round(2 + rnd(s) * rnd(s) * 8 + rnd(s) * 2), 1, 10); // mostly mediocre, rarely brilliant
+  const p: Person = {
+    id: 'p' + s.nextId++, name: FIRST[Math.floor(rnd(s) * FIRST.length)] + ' ' + LAST[Math.floor(rnd(s) * LAST.length)], portrait: Math.floor(rnd(s) * 72),
+    age: 26 + Math.floor(rnd(s) * 36), kind, spec: '', eff: 0, prod: 0, exp: 0, skill: 0, salary: 0,
+  };
+  if (kind === 'manager') {
+    p.spec = MGR_SPECS[Math.floor(rnd(s) * MGR_SPECS.length)]; p.eff = stat(); p.prod = stat(); p.exp = stat();
+    p.salary = Math.round((1500 + (p.eff + p.prod + p.exp) * 330) / 50) * 50;
+  } else {
+    const k = Object.keys(ADVISOR_SPECS); p.spec = k[Math.floor(rnd(s) * k.length)]; p.skill = stat(); p.salary = Math.round((2000 + p.skill * 900) / 50) * 50;
+  }
+  return p;
+}
+/** Keep the job market stocked: some candidates leave, new ones appear. */
+export function refreshCandidates(s: GameState, initial = false) {
+  let pool = (s.candidates ??= []);
+  if (!initial) s.candidates = pool = pool.filter(() => rnd(s) > 0.3);
+  while (pool.filter(x => x.kind === 'manager').length < 7) pool.push(makePerson(s, 'manager'));
+  while (pool.filter(x => x.kind === 'advisor').length < 4) pool.push(makePerson(s, 'advisor'));
+}
+/** Bonuses from the manager running a facility. Managers know their own kind of building best; elsewhere they are half as useful. */
+export function mgrBonus(s: GameState, b: Building): { eff: number; prod: number; exp: number } {
+  const m = s.companies.find(c => c.id === b.owner)?.staff?.find(x => x.assigned === b.id);
+  if (!m) return { eff: 0, prod: 0, exp: 0 };
+  const f = m.spec === b.type ? 1 : 0.5;
+  return { eff: 0.015 * m.eff * f, prod: 0.02 * m.prod * f, exp: 0.02 * m.exp * f };
+}
+/** What the advisor tells you. Better advisors give more items. Advisors only see their own field. */
+export function advice(s: GameState, c: Company): { topic: string; text: string; tone: 'good' | 'bad' | 'info'; building?: string }[] {
+  const a = c.staff?.find(x => x.kind === 'advisor'); if (!a) return [];
+  const out: { topic: string; text: string; tone: 'good' | 'bad' | 'info'; building?: string; w: number }[] = []; const T = ADVISOR_SPECS[a.spec];
+  const mine = Object.values(s.buildings).filter(b => b.owner === c.id);
+  const add = (text: string, tone: 'good' | 'bad' | 'info', w: number, building?: string) => out.push({ topic: T, text, tone, building, w });
+  if (a.spec === 'market') {
+    const ps = PRODUCT_LIST.filter(p => !p.research || isUnlocked(c, p.id)).map(p => ({ p, m: s.market[p.id] }));
+    for (const { p, m } of ps) { const ch = m.idx / (m.prev ?? m.idx) - 1; if (ch > 0.03) add(`${p.name} prices are rising (${(ch * 100).toFixed(0)}% this month).`, 'good', 2 + ch * 20); else if (ch < -0.03) add(`${p.name} prices are falling (${(ch * 100).toFixed(0)}% this month) — avoid stocking up.`, 'bad', 2 - ch * 20); }
+    const best = ps.filter(x => x.p.kind === 'consumer').sort((x, y) => y.m.demand * y.m.idx - x.m.demand * x.m.idx)[0]; if (best) add(`Demand is strongest for ${best.p.name.toLowerCase()}.`, 'info', 3);
+    const unsold = mine.filter(b => b.type === 'factory' && b.product && b.stock.qty > capacity(b) * 1.5); for (const b of unsold) add(`${b.name} piles up unsold ${PRODUCTS[b.product!].name.toLowerCase()}: lower the price or use the world market.`, 'bad', 4, b.id);
+  } else if (a.spec === 'finance') {
+    for (const L of c.loans ?? []) { const left = L.startTurn + L.term - s.turn; if (left <= 3) add(`A loan of ${fmtMoney(L.principal)} falls due in ${Math.max(0, left)} months.`, 'bad', 5); }
+    const rate = (c.loans ?? []).reduce((m, L) => Math.max(m, L.rate), 0); if (rate > 0.012) add(`You are paying ${(rate * 100).toFixed(1)}% a month on a loan. Refinance with a cheaper lender.`, 'bad', 3);
+    const fair = equity(s, c) / (c.shares ?? TOTAL_SHARES); if (c.price && c.price < fair * 0.9) add('Your shares trade below book value — a good time to buy back.', 'good', 2); else if (c.price && c.price > fair * 1.6) add('Your shares are expensive relative to book value — a good time to issue.', 'info', 2);
+    if (c.cash > 300_000 && !(c.loans ?? []).length) add('You hold plenty of idle cash. Invest it or pay a dividend.', 'info', 2);
+    if (c.cash < 30_000) add('Cash is low: wages and loan payments may overdraw you.', 'bad', 4);
+    for (const o of s.companies) if (o.id !== c.id && !o.bankrupt && o.price && o.priceHist && o.priceHist.length > 3 && o.price / o.priceHist[o.priceHist.length - 4] > 1.1) add(`${o.name} shares gained ${((o.price / o.priceHist[o.priceHist.length - 4] - 1) * 100).toFixed(0)}% in three months.`, 'info', 2);
+  } else if (a.spec === 'production') {
+    for (const b of mine) { if (!b.product || b.type === 'store') continue; const e = efficiency(s, b); if (e < 0.8) { const why = b.condition < 60 ? 'its condition is poor — raise maintenance' : b.wage < cityWage(s, b.city) * 0.95 ? 'wages are below the city average' : 'it is understaffed'; add(`${b.name} runs at ${(e * 100).toFixed(0)}%: ${why}.`, 'bad', 5 + (1 - e) * 5, b.id); } }
+    for (const b of mine) if (b.type !== 'store' && b.type !== 'rd' && b.product && !(c.staff ?? []).some(m => m.assigned === b.id)) add(`${b.name} has no manager.`, 'info', 1, b.id);
+    const best = mine.filter(b => b.hist && b.hist.length).sort((x, y) => y.hist![y.hist!.length - 1] - x.hist![x.hist!.length - 1])[0]; if (best) add(`${best.name} is your best earner (${fmtMoney(best.hist![best.hist!.length - 1])} last month).`, 'good', 2, best.id);
+  } else {
+    const live = s.companies.filter(o => o.id !== c.id && !o.bankrupt);
+    const top = [...live].sort((x, y) => netWorth(s, y) - netWorth(s, x))[0]; if (top) add(`${top.name} leads the ranking with a net worth of ${fmtMoney(netWorth(s, top))}.`, 'info', 3);
+    for (const o of live.slice(0, 6)) { const bs = Object.values(s.buildings).filter(b => b.owner === o.id && b.product); const set = [...new Set(bs.map(b => PRODUCTS[b.product!].name.toLowerCase()))]; if (set.length) add(`${o.name} focuses on ${set.slice(0, 3).join(', ')} (${bs.length} facilities, ${o.isAI ? 'AI' : 'player'}).`, 'info', 1); }
+    const last = (o: Company) => o.history[o.history.length - 1]; for (const o of live) if (last(o) && last(o).profit > 0 && last(o).profit > (last(c)?.profit ?? 0) * 2 && last(o).profit > 20_000) add(`${o.name} earned ${fmtMoney(last(o).profit)} last month — more than double your result.`, 'bad', 3);
+  }
+  const n = 1 + Math.floor(a.skill / 3);
+  return out.sort((x, y) => y.w - x.w).slice(0, n).map(({ w, ...r }) => r);
+}
+
+// ---------------------------------------------------------------- real estate: vacant facilities for sale
+export const VACANT_MAX = 10, VACANT_LIFE = 8;
+const VACANT_WEIGHTS: [BuildingType, number][] = [['factory', 30], ['store', 24], ['farm', 14], ['forest', 8], ['mine', 8], ['oil', 6], ['rd', 5]];
+const ORIGIN_TEXT = { closure: 'after the owner went out of business', bankrupt: 'from a liquidated company', estate: 'from an estate sale' };
+/** Offer one facility for sale on a free tile. Costs 45-65% of a new building, but is worn. */
+function spawnVacancy(s: GameState, quiet = false): boolean {
+  if (!s.world) return false;
+  let r = rnd(s) * VACANT_WEIGHTS.reduce((n, w) => n + w[1], 0); let type = VACANT_WEIGHTS[0][0];
+  for (const [t, w] of VACANT_WEIGHTS) { if ((r -= w) < 0) { type = t; break; } }
+  const def = BUILDINGS[type]; const rm = railMap(s); const tiles = s.world.tiles; const W = s.world.w;
+  for (let k = 0; k < 800; k++) {
+    const idx = Math.floor(rnd(s) * tiles.length); const t = tiles[idx] as Terrain;
+    if (!def.terrain.includes(t) || rm?.on[idx] || s.lots[lotKey(idx)] || s.vacant?.some(v => v.idx === idx) || Object.values(s.buildings).some(b => b.idx === idx)) continue;
+    const city = nearestCity(s.cities, idx), c = s.cities[city];
+    if (!['forest', 'mine', 'oil', 'farm'].includes(type) && Math.hypot(c.x / WORLD_SCALE - (idx % W), c.y / WORLD_SCALE - Math.floor(idx / W)) > 14) continue;
+    const land = lotPrice(s, idx); if (!land) continue;
+    let product: ProductId | null = null;
+    if (def.products) product = def.products[Math.floor(rnd(s) * def.products.length)];
+    else if (type === 'factory') { const ps = PRODUCT_LIST.filter(p => p.kind !== 'raw' && !p.research); product = ps[Math.floor(rnd(s) * ps.length)].id; }
+    else if (type === 'rd') product = 'bread';
+    const origin = (['closure', 'closure', 'estate'] as const)[Math.floor(rnd(s) * 3)];
+    const v: Vacancy = { id: 'v' + s.nextId++, type, city, idx, product, cond: Math.round(55 + rnd(s) * 35), land, build: Math.round(def.cost * (0.45 + rnd(s) * 0.2) / 100) * 100, listedTurn: s.turn, origin };
+    (s.vacant ??= []).push(v);
+    if (!quiet) s.news.push({ turn: s.turn, kind: 'info', tag: 'vacant', text: `For sale: ${/^[aeiou]/i.test(def.name) ? 'an' : 'a'} ${def.name.toLowerCase()}${product && type !== 'store' && type !== 'rd' ? ' (' + PRODUCTS[product].name.toLowerCase() + ')' : ''} in ${c.name}, ${ORIGIN_TEXT[origin]}. Asking ${fmtMoney(v.land + v.build)}, a ${Math.round((1 - (v.land + v.build) / (v.land + def.cost)) * 100)}% saving on building new.` });
+    return true;
+  }
+  return false;
+}
+function spawnVacancies(s: GameState) {
+  s.vacant = (s.vacant ?? []).filter(v => s.turn - v.listedTurn < VACANT_LIFE && !s.lots[lotKey(v.idx)]);
+  const r = rnd(s), n = r < 0.15 ? 0 : r < 0.55 ? 1 : 2;
+  for (let i = 0; i < n && s.vacant.length < VACANT_MAX; i++) spawnVacancy(s);
+}
+
+// ---------------------------------------------------------------- malls
+/** Monthly: tenants pay their rent, leases renew at the mall's current rent, units without a branded product are evicted, orphaned units disappear. */
+function collectRents(s: GameState) {
+  for (const u of Object.values(s.buildings).filter(x => x.mall)) {
+    const m = s.buildings[u.mall!]; const t = s.companies.find(x => x.id === u.owner)!;
+    if (!m || t.bankrupt) { removeBuilding(s, u); continue; }
+    const mo = s.companies.find(x => x.id === m.owner)!; const sl = u.slots[0];
+    if (sl?.product && t.brand[sl.product] < MALL_MIN_BRAND / 2) {
+      const msg = `${m.name} evicted your ${PRODUCTS[sl.product].name.toLowerCase()} shop: the brand became too weak for a branded unit.`;
+      t.news.push({ turn: s.turn, text: msg }); if (mo.id !== t.id) mo.news.push({ turn: s.turn, text: `${t.name} lost its unit in ${m.name} (weak brand).` });
+      removeBuilding(s, u); continue;
+    }
+    if (u.leaseEnd != null && s.turn >= u.leaseEnd) { u.rent = mo.id === t.id ? 0 : m.rent ?? 0; u.leaseEnd = s.turn + MALL_LEASE; }
+    const rent = mo.id === t.id ? 0 : u.rent ?? 0; if (!rent) continue;
+    t.ledger.maint += rent; mo.cash += rent; mo.ledger.revenue += rent; m.report.revenue += rent;
+  }
+}
+export function mallInfos(s: GameState): MallInfo[] {
+  return Object.values(s.buildings).filter(b => b.type === 'mall').map(m => ({
+    id: m.id, owner: m.owner, name: m.name, city: m.city, idx: m.idx, rent: m.rent ?? 0, units: MALL_UNITS, cond: Math.round(m.condition),
+    tenants: Object.values(s.buildings).filter(u => u.mall === m.id).map(u => ({ company: u.owner, product: u.slots[0]?.product ?? null, rent: u.owner === m.owner ? 0 : u.rent ?? 0, leaseEnd: u.leaseEnd ?? 0, building: u.id })),
+  }));
 }

@@ -11,7 +11,7 @@ export const api = {
   world: (id: string, token: string) => call('GET', '/api/games/' + id + '/world', undefined, { authorization: 'Bearer ' + token }) as Promise<{ id: string; w: number; h: number; tiles: string; rails: { a: number; b: number; tiles: number[] }[] }>,
   view: (id: string, token: string) => call('GET', `/api/games/${id}/view`, undefined, { authorization: 'Bearer ' + token }) as Promise<View>,
   action: (id: string, token: string, a: Action) => call('POST', `/api/games/${id}/action`, a, { authorization: 'Bearer ' + token }) as Promise<{ ok: true; info?: string; view: View }>,
-  ready: (id: string, token: string, ready: boolean) => call('POST', `/api/games/${id}/ready`, { ready }, { authorization: 'Bearer ' + token }) as Promise<{ view: View }>,
+  ready: (id: string, token: string, ready: boolean, force = false) => call('POST', `/api/games/${id}/ready`, { ready, force }, { authorization: 'Bearer ' + token }) as Promise<{ view: View }>,
 };
 export const adminApi = (token: () => string) => ({
   login: (password: string) => call('POST', '/api/admin/login', { password }) as Promise<{ token: string }>,

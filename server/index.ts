@@ -30,7 +30,7 @@ function flush() {
 }
 setInterval(flush, 2000);
 // Development policy: saves in an outdated/unreadable format are discarded (no archiving) and a fresh test game is created.
-const WORLD_VERSION = 12;
+const WORLD_VERSION = 19;
 function newGame(settings: Settings, pw = ''): GameRec {
   const salt = rid(8);
   return { id: rid(4), state: createGame(settings), players: [], gameSalt: salt, gameHash: pw ? hash(pw, salt) : null, nextTurnAt: Date.now() + settings.turnIntervalHours * 3600_000, paused: false, createdAt: Date.now() };
@@ -175,7 +175,7 @@ app.post('/api/games/:id/action', wrap((req, res) => {
 app.post('/api/games/:id/ready', wrap((req, res) => {
   const a = playerAuth(req); if (!a) return void res.status(401).json({ error: 'Not logged in' });
   const c = a.g.state.companies.find(x => x.id === a.p.companyId)!; c.ready = !!req.body?.ready; save(a.g);
-  checkReady(a.g); res.json({ view: buildView(a.g, a.p.companyId) });
+  if (req.body?.force && !a.g.state.finished && !a.g.paused) playTurn(a.g, 'debug: forced by ' + a.p.name); else checkReady(a.g); res.json({ view: buildView(a.g, a.p.companyId) });
 }));
 
 // static client (production)

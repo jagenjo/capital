@@ -46,6 +46,26 @@ function dijkstra(tiles: string[], from: number, cost: (ch: string) => number) {
   }
   return { dist, prev };
 }
+/** Cheapest 4-connected route from `from` to `to`. Every change of direction costs `turn`, which gives long straight runs instead of staircases. `turnOk(tile)` can forbid turning on a tile. */
+function route(tiles: string[], from: number, to: number, cost: (v: number) => number, turn: number, turnOk: (v: number) => boolean = () => true): { cost: number; path: number[] } | null {
+  const N = WW * WH, dist = new Float64Array(N * 4).fill(Infinity), prev = new Int32Array(N * 4).fill(-1);
+  const h = new Heap(); for (let d = 0; d < 4; d++) { dist[from * 4 + d] = 0; h.push(0, from * 4 + d); }
+  let end = -1;
+  for (let n = h.pop(); n; n = h.pop()) {
+    const [d0, st] = n; if (d0 > dist[st]) continue; const u = st >> 2, ud = st & 3;
+    if (u === to) { end = st; break; }
+    const ux = u % WW, uy = (u / WW) | 0;
+    for (let k = 0; k < 4; k++) {
+      if (k !== ud && !turnOk(u)) continue;
+      const x = ux + DIRS[k][0], y = uy + DIRS[k][1]; if (x < 0 || y < 0 || x >= WW || y >= WH) continue;
+      const v = y * WW + x, c = cost(v); if (!isFinite(c)) continue;
+      const nd = d0 + c + (k !== ud && u !== from ? turn : 0), vs = v * 4 + k; if (nd < dist[vs]) { dist[vs] = nd; prev[vs] = st; h.push(nd, vs); }
+    }
+  }
+  if (end < 0) return null;
+  const path: number[] = []; for (let st = end; st >= 0; st = prev[st]) path.push(st >> 2);
+  return { cost: dist[end], path };
+}
 const landCost = (ch: string) => ({ g: 1, f: 1, b: 1.2, t: 2.5, h: 3, o: 1.2, e: 6, m: 8, n: 20, r: 0.8, u: 0.8, s: 0.8, p: 0.8 } as Record<string, number>)[ch] ?? Infinity;
 const travelCost = (ch: string) => ({ g: 1, f: 1, b: 1, t: 1.6, h: 1.8, o: 1, e: 2.5, m: 3, n: 5, r: 0.8, u: 0.8, s: 0.8, p: 0.8, a: 2, d: 2 } as Record<string, number>)[ch] ?? 2;
 
@@ -71,14 +91,14 @@ export function buildWorld(s: GameState) {
     else tiles[i] = detail[i] > 0.58 ? 'f' : 'g';
   }
   // scarce resources: a few small random-grown clusters of oil (flat land) and ore (inside hills/mountains)
-  const scatter = (chars: string, clusters: number, minSize: number, maxSize: number, to: string) => {
-    const pool = [...Array(tiles.length).keys()].filter(i => chars.includes(tiles[i]));
+  const scatter = (chars: string, clusters: number, minSize: number, maxSize: number, to: string, allow: (i: number) => boolean = () => true) => {
+    const pool = [...Array(tiles.length).keys()].filter(i => chars.includes(tiles[i]) && allow(i));
     for (let c = 0; c < clusters && pool.length; c++) {
       const start = pool[Math.floor(rnd(s) * pool.length)], size = minSize + Math.floor(rnd(s) * (maxSize - minSize + 1));
       const front = [start]; let done = 0;
       while (front.length && done < size) {
         const k = Math.floor(rnd(s) * front.length), i = front.splice(k, 1)[0];
-        if (!chars.includes(tiles[i])) continue;
+        if (!chars.includes(tiles[i]) || !allow(i)) continue;
         tiles[i] = to; done++;
         for (const [dx, dy] of DIRS) { const x = (i % WW) + dx, y = ((i / WW) | 0) + dy; if (x > 0 && y > 0 && x < WW - 1 && y < WH - 1) front.push(y * WW + x); }
       }
@@ -104,15 +124,15 @@ export function buildWorld(s: GameState) {
     if (ok) cand.push(i);
   }
   for (let i = cand.length - 1; i > 0; i--) { const j = Math.floor(rnd(s) * (i + 1)); [cand[i], cand[j]] = [cand[j], cand[i]]; }
-  const coastalWanted = Math.max(2, Math.ceil(cities.length / 2));
+  const coastalWanted = Math.max(2, Math.ceil(cities.filter(c => !c.town).length / 2));
   const centers: number[] = [];
   for (const city of cities) {
-    let minD = 70, chosen = -1;
-    while (chosen < 0 && minD > 12) {
+    let minD = city.town ? 26 : 70, chosen = -1;
+    while (chosen < 0 && minD > (city.town ? 7 : 12)) {
       for (const c of cand) {
         const x = c % WW, y = (c / WW) | 0;
         if (placed.some(p => Math.hypot(p.x - x, p.y - y) < minD)) continue;
-        if (city.id < coastalWanted && !nearSea(x, y, 6)) continue;
+        if (!city.town && city.id < coastalWanted && !nearSea(x, y, 6)) continue;
         chosen = c; break;
       }
       if (chosen < 0) minD -= 6;
@@ -120,16 +140,16 @@ export function buildWorld(s: GameState) {
     if (chosen < 0) chosen = cand[Math.floor(rnd(s) * cand.length)] ?? (WH / 2 * WW + WW / 2);
     const x = chosen % WW, y = (chosen / WW) | 0; placed.push({ x, y }); centers.push(chosen);
     city.x = Math.round((x + 0.5) * WORLD_SCALE); city.y = Math.round((y + 0.5) * WORLD_SCALE);
-    city.radius = Math.round((3.5 + Math.sqrt(city.pop / 1000) * 0.17) * 10) / 10;
+    city.radius = Math.round((city.town ? 1.4 + Math.sqrt(city.pop / 1000) * 0.12 : 2.2 + Math.sqrt(city.pop / 1000) * 0.085) * 10) / 10;
     // city blob: downtown core + suburbs
     const R = Math.ceil(city.radius * 1.4);
     for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) {
       const xx = x + dx, yy = y + dy; if (xx < 1 || yy < 1 || xx >= WW - 1 || yy >= WH - 1) continue;
       const i = yy * WW + xx; if (!okForCity(tiles[i]) && tiles[i] !== 'o') continue;
       const d = Math.hypot(dx, dy), lim = city.radius * (0.7 + 0.6 * cityN[i]);
-      if (d < lim) tiles[i] = d < lim * 0.45 ? 'u' : 's';
+      if (d < lim) tiles[i] = !city.town && d < lim * 0.45 ? 'u' : 's';
     }
-    tiles[chosen] = 'u';
+    tiles[chosen] = city.town ? 's' : 'u';
     // port: nearest shallow-sea tile within reach, joined to the city by a short harbour road
     let best = -1, bd = 1e9;
     for (let dy = -R - 8; dy <= R + 8; dy++) for (let dx = -R - 8; dx <= R + 8; dx++) {
@@ -137,7 +157,7 @@ export function buildWorld(s: GameState) {
       const i = yy * WW + xx; if (tiles[i] !== 'a' || !ext[i]) continue;
       const d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; }
     }
-    if (best >= 0 && Math.sqrt(bd) > city.radius + 4) best = -1; // sea too far away: inland city
+    if (best >= 0 && (city.town || Math.sqrt(bd) > city.radius + 4)) best = -1; // towns have no port; sea too far away: inland city
     city.port = best >= 0;
     if (best >= 0) {
       // walk from the city centre toward the water (4-connected), turning the land into suburb tiles so the city really touches the sea
@@ -167,24 +187,34 @@ export function buildWorld(s: GameState) {
   const extra: { a: number; b: number; d: number }[] = [];
   for (let a = 0; a < cities.length; a++) for (let b = a + 1; b < cities.length; b++) if (!edges.some(([x, y]) => (x === a && y === b) || (x === b && y === a))) extra.push({ a, b, d: Math.hypot(placed[a].x - placed[b].x, placed[a].y - placed[b].y) });
   extra.sort((p, q) => p.d - q.d); for (const x of extra.slice(0, Math.max(1, Math.floor(cities.length / 3)))) edges.push([x.a, x.b]);
+  const roadCost = (v: number) => landCost(tiles[v]);
   for (const [a, b] of edges) {
-    const { dist, prev } = dijkstra(tiles, centers[a], landCost);
-    if (!isFinite(dist[centers[b]])) continue; // separated by sea
-    for (let v = centers[b]; v >= 0; v = prev[v]) if ('gfbthmn'.includes(tiles[v])) tiles[v] = 'r';
+    const r = route(tiles, centers[a], centers[b], roadCost, 2.5); if (!r) continue; // separated by sea
+    for (const v of r.path) if ('gfbthmn'.includes(tiles[v])) tiles[v] = 'r';
   }
+  // --- keep oil fields and ore deposits well away from cities (a city plus a 12-tile margin); regrow what was lost elsewhere
+  { const far = (i: number) => placed.every((p, k) => Math.hypot(p.x - (i % WW), p.y - ((i / WW) | 0)) > cities[k].radius * 1.4 + 12);
+    let lostO = 0, lostE = 0;
+    for (let i = 0; i < tiles.length; i++) { if (far(i)) continue; if (tiles[i] === 'o') { tiles[i] = 'g'; lostO++; } else if (tiles[i] === 'e') { tiles[i] = 'h'; lostE++; } }
+    if (lostO) scatter('gfbt', Math.ceil(lostO / 5), 3, 7, 'o', far);
+    if (lostE) scatter('hm', Math.ceil(lostE / 5), 3, 8, 'e', far); }
   // --- railways: a forest of lines between some land-connected cities (big and close first)
   const rails: Rail[] = []; { const cands: { a: number; b: number; sc: number; tiles: number[] }[] = [];
-    const railCost = (ch: string) => ({ g: 1, f: 1, b: 1.2, t: 1.5, h: 2.5, o: 1.2, e: 3, m: 6, n: 10, r: 0.5, u: 0.5, s: 0.5 } as Record<string, number>)[ch] ?? Infinity;
-    for (let a = 0; a < cities.length; a++) { const { dist, prev } = dijkstra(tiles, centers[a], railCost);
-      for (let b = a + 1; b < cities.length; b++) { if (!isFinite(dist[centers[b]])) continue; const ts: number[] = []; for (let v = centers[b]; v >= 0; v = prev[v]) ts.push(v);
-        cands.push({ a, b, sc: (cities[a].pop + cities[b].pop) / (dist[centers[b]] + 20), tiles: ts }); } }
+    // rails run on their own tiles: a road tile may only be crossed (one tile, no turning on it), never followed
+    const base = (ch: string) => ({ g: 1, f: 1, b: 1.2, t: 1.5, h: 2.5, o: 1.2, e: 3, m: 6, n: 10, u: 0.5, s: 0.5 } as Record<string, number>)[ch] ?? Infinity;
+    const railCost = (v: number) => tiles[v] === 'r' ? 1 + 12 : base(tiles[v]);
+    const bigs = cities.filter(c => !c.town); const seen = new Set<string>();
+    for (const A of bigs) { const near = bigs.filter(c => c !== A).sort((p, q) => Math.hypot(p.x - A.x, p.y - A.y) - Math.hypot(q.x - A.x, q.y - A.y)).slice(0, 3);
+      for (const B of near) { const a = Math.min(A.id, B.id), b = Math.max(A.id, B.id), key = a + '-' + b; if (seen.has(key)) continue; seen.add(key);
+        const r = route(tiles, centers[a], centers[b], railCost, 5, v => tiles[v] !== 'r'); if (!r) continue;
+        cands.push({ a, b, sc: (cities[a].pop + cities[b].pop) / (r.cost + 20), tiles: r.path }); } }
     cands.sort((p, q) => q.sc - p.sc); const uf = cities.map((_, i) => i); const root = (i: number): number => (uf[i] === i ? i : (uf[i] = root(uf[i])));
-    const want = Math.max(1, Math.round(cities.length * 0.6));
+    const want = Math.max(1, Math.round(bigs.length * 0.6));
     for (const c of cands) { if (rails.length >= want) break; if (root(c.a) === root(c.b)) continue; uf[root(c.a)] = root(c.b); rails.push({ a: c.a, b: c.b, tiles: c.tiles }); } }
   // --- travel distance matrix (roads fast, ferries across sea)
   s.dist = cities.map(() => cities.map(() => 0));
   cities.forEach((_, a) => { const { dist } = dijkstra(tiles, centers[a], travelCost); cities.forEach((__, b) => { s.dist![a][b] = a === b ? 15 : Math.round(dist[centers[b]] * WORLD_SCALE); }); });
-  s.world = { v: 12, w: WW, h: WH, tiles: tiles.join(''), rails };
+  s.world = { v: 19, w: WW, h: WH, tiles: tiles.join(''), rails };
 }
 
 export const nearestCity = (cities: { x: number; y: number }[], idx: number): number => {

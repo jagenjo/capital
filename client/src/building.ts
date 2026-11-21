@@ -1,9 +1,10 @@
 // "Selected tile configuration" for an owned building: compact tabbed panel.
-import { OVERSTAFF_CAP, OVERSTAFF_BONUS, BUILDINGS, PRODUCTS, PRODUCT_LIST, MAX_LINES, MAX_AUTO, MAX_STORE_SIZE, MODULES, FAC_GRID, type ProductId, type ModuleType } from '../../shared/data.js';
-import { requiredWorkers, capacity, slotCapacity, moduleStats, layoutIssues, isLinked, linkKey, cellNeed, adj8, linkable, staffFactor, staffCap, whCap, exportCap, cellCandidates, worldPrice, worldVolume } from '../../shared/engine.js';
+import { OVERSTAFF_CAP, OVERSTAFF_BONUS, BUILDINGS, PRODUCTS, PRODUCT_LIST, MAX_LINES, MAX_AUTO, MAX_STORE_SIZE, MODULES, FAC_GRID, MALL_UNITS, MALL_MIN_BRAND, MALL_LEASE, type ProductId, type ModuleType } from '../../shared/data.js';
+import { requiredWorkers, capacity, slotCapacity, moduleStats, layoutIssues, isLinked, linkKey, cellNeed, adj8, linkable, staffFactor, staffCap, whCap, exportCap, cellCandidates, worldPrice, worldVolume, isUnlocked, canResearch, researchOf, UNLOCK_RATE } from '../../shared/engine.js';
 import type { Building } from '../../shared/types.js';
 import { h, money, money2, num, cls, asset } from './util.js';
 import { S, act, companyOf } from './state.js';
+import { rentControls } from './realestate.js';
 
 const numInput = (value: number, onchange: (v: number) => void, attrs: Record<string, any> = {}) => {
   const el = h('input', { type: 'number', value, ...attrs });
@@ -35,24 +36,35 @@ function sourceSelect(b: Building, product: ProductId, current: string, onchange
   return sel;
 }
 
-function productSelect(ids: ProductId[], current: ProductId, onchange: (p: ProductId) => void) {
-  const s = h('select', null, ids.map(p => h('option', { value: p, selected: p === current }, PRODUCTS[p].name)));
+function productSelect(ids: ProductId[], current: ProductId, onchange: (p: ProductId) => void, gate = false) {
+  const me = S.view!.me; // gate: hi-tech goods you have not researched yet cannot be picked
+  const s = h('select', null, ids.map(p => { const lock = !isUnlocked(me, p); return h('option', { value: p, selected: p === current, disabled: gate && lock }, (lock ? '🔒 ' : '') + PRODUCTS[p].name); }));
   s.addEventListener('change', () => { const p = s.value as ProductId; s.value = current; onchange(p); });
   return s;
 }
 
 const tabsFor = (b: Building): string[] =>
-  b.type === 'factory' ? ['Production', 'Layout', 'Inputs', 'Staff', 'Report']
+  b.type === 'mall' ? ['Units', 'Report']
+    : b.type === 'factory' ? ['Production', 'Layout', 'Inputs', 'Staff', 'Report']
     : b.type === 'store' ? ['Shelves', 'Staff', 'Report']
       : b.type === 'rd' ? ['Research', 'Staff', 'Report']
         : ['Production', 'Staff', 'Report'];
 
+function mgrChip(b: Building): HTMLElement {
+  const m = S.view!.me.staff?.find(p => p.assigned === b.id);
+  const go = () => { S.tab = 'personnel'; S.render(); };
+  if (!m) return h('div', { class: 'mgrchip muted small clickable', onclick: go }, '👤 No manager assigned — open Personnel');
+  const f = m.spec === b.type ? 1 : 0.5;
+  return h('div', { class: 'mgrchip small clickable', onclick: go, title: 'Open Personnel' },
+    h('img', { src: asset(`person/${String(m.portrait).padStart(2, '0')}.png`) }),
+    h('b', null, m.name), ` · manager${f === 1 ? ' (specialist)' : ''} · efficiency +${(1.5 * m.eff * f).toFixed(1)}% · output +${(2 * m.prod * f).toFixed(0)}% · costs −${(2 * m.exp * f).toFixed(0)}%`);
+}
 export function buildingPanel(b: Building): HTMLElement {
   const v = S.view!; const def = BUILDINGS[b.type];
   const tabs = tabsFor(b); const tab = tabs.includes(S.cfgTab) ? S.cfgTab : tabs[0];
   const sections: Record<string, () => HTMLElement> = {
     Production: () => productionTab(b), Layout: () => layoutTab(b), Inputs: () => inputsTab(b), Staff: () => staffTab(b), Report: () => reportTab(b),
-    Shelves: () => shelvesTab(b), Research: () => researchTab(b),
+    Shelves: () => shelvesTab(b), Units: () => mallTab(b), Research: () => researchTab(b),
   };
   return h('div', { class: 'cfg' },
     h('div', { class: 'cfghead' },
@@ -61,6 +73,7 @@ export function buildingPanel(b: Building): HTMLElement {
       h('button', { class: 'mini', title: 'Rename', onclick: () => { const n = prompt('Rename building', b.name); if (n) act({ type: 'rename', id: b.id, name: n }); } }, 'Rename'),
       h('button', { class: 'mini danger', title: 'Demolish', onclick: () => { if (confirm('Demolish ' + b.name + '? You recover ' + money(b.invested * 0.4) + '. The land stays yours.')) act({ type: 'sellBuilding', id: b.id }); } }, 'Demolish +' + money(b.invested * 0.4)),
       h('button', { class: 'mini', title: 'Close', onclick: () => { S.sel = null; S.buildingId = null; S.render(); } }, '✕')),
+    mgrChip(b),
     h('div', { class: 'tabs' }, tabs.map(t => h('button', { class: 'tab' + (t === tab ? ' active' : ''), onclick: () => { S.cfgTab = t; S.render(); } }, t))),
     h('div', { class: 'tabbody' }, sections[tab]()));
 }
@@ -145,17 +158,22 @@ function inputsTab(b: Building): HTMLElement {
 }
 
 function researchTab(b: Building): HTMLElement {
-  const c = S.view!.me;
+  const c = S.view!.me; const P = PRODUCTS[b.product!]; const locked = !!P.research && !isUnlocked(c, b.product!);
+  const hi = PRODUCT_LIST.filter(p => p.research && !isUnlocked(c, p.id));
   return h('div', { class: 'kv2' }, h('label', null, 'Researching'), productSelect(PRODUCT_LIST.map(p => p.id), b.product!, p => act({ type: 'setProduct', id: b.id, product: p })),
-    h('label', null, 'Tech level'), h('div', { class: 'row' }, h('div', { class: 'bar', style: 'width:140px' }, h('div', { style: 'width:' + c.tech[b.product!] + '%' })), c.tech[b.product!].toFixed(1) + ' / 100'),
-    h('div', { class: 'note', style: 'grid-column:1/-1' }, 'Each scientist adds research points per month, with diminishing returns. Higher tech raises the quality of everything you make or sell of that product.'));
+    locked ? h('label', null, 'Unlock progress') : h('label', null, 'Tech level'),
+    locked ? h('div', { class: 'row' }, h('div', { class: 'bar', style: 'width:140px' }, h('div', { style: 'width:' + Math.round(researchOf(c, b.product!) / P.research! * 100) + '%' })), Math.round(researchOf(c, b.product!)) + ' / ' + P.research + ' points')
+      : h('div', { class: 'row' }, h('div', { class: 'bar', style: 'width:140px' }, h('div', { style: 'width:' + c.tech[b.product!] + '%' })), c.tech[b.product!].toFixed(1) + ' / 100'),
+    locked && !canResearch(c, b.product!) ? h('div', { class: 'bad small', style: 'grid-column:1/-1' }, 'Needs ' + PRODUCTS[P.after!].name + ' unlocked first.') : null,
+    h('div', { class: 'note', style: 'grid-column:1/-1' }, locked ? 'This is a hi-tech product: scientists develop it (about ' + UNLOCK_RATE + ' unlock points per research point). Once unlocked you can build factories and production lines for it; then keep researching to raise its quality.'
+      : 'Each scientist adds research points per month, with diminishing returns. Higher tech raises the quality of everything you make or sell of that product.' + (hi.length ? ' Pick a hi-tech product (🔒) to unlock it: ' + hi.map(p => p.name + ' (' + p.research + ')').join(', ') + '.' : '')));
 }
 
 function shelvesTab(b: Building): HTMLElement {
   const v = S.view!; const city = v.cities[b.city]; const need = requiredWorkers(b);
   const ref = (p: ProductId) => PRODUCTS[p].basePrice * 1.42 * v.market[p].idx * city.priceIdx;
   const rows = b.slots.map((sl, i) => {
-    const prod = h('select', null, h('option', { value: '' }, '— empty —'), PRODUCT_LIST.filter(p => p.kind === 'consumer').map(p => h('option', { value: p.id, selected: p.id === sl.product }, p.name)));
+    const prod = h('select', null, h('option', { value: '' }, '— empty —'), PRODUCT_LIST.filter(p => p.kind === 'consumer').map(p => h('option', { value: p.id, selected: p.id === sl.product, disabled: !!b.mall && p.id !== sl.product && v.me.brand[p.id] < MALL_MIN_BRAND }, (b.mall && p.id !== sl.product && v.me.brand[p.id] < MALL_MIN_BRAND ? '🔒 ' : '') + p.name)));
     const price = h('input', { type: 'number', value: sl.price, step: 0.5, style: 'width:78px' });
     const order = h('input', { type: 'number', value: sl.order, style: 'width:66px' });
     const commit = () => act({ type: 'setSlot', id: b.id, slot: i, product: (prod.value || null) as ProductId | null, price: +price.value, order: +order.value, source: prod.value === sl.product ? sl.source : '' });
@@ -170,12 +188,23 @@ function shelvesTab(b: Building): HTMLElement {
       h('td', { class: 'num' }, sl.product ? num(sl.sold) + (sl.lost > 0 ? ' ⚠' : '') : ''));
   });
   return h('div', null,
-    h('div', { class: 'row', style: 'margin-bottom:4px' }, h('span', null, 'Size ' + b.size + '/' + MAX_STORE_SIZE + ' · staff need ' + need), h('button', { class: 'mini', disabled: b.size >= MAX_STORE_SIZE, onclick: () => act({ type: 'upgradeSize', id: b.id }) }, 'Enlarge ' + money(BUILDINGS.store.cost * 0.5 * b.size))),
+    b.mall ? h('div', { class: 'note', style: 'margin-bottom:4px' }, `Unit in ${v.malls.find(m => m.id === b.mall)?.name ?? 'a mall'} · rent ${money(b.rent ?? 0)}/month · lease until turn ${b.leaseEnd} (renews at the mall's current rent every ${MALL_LEASE} months) · staff need ${need}. Only branded products (brand ≥ ${MALL_MIN_BRAND}) may be sold here; keep advertising or the mall evicts you. Demolishing the unit ends the lease.`) : h('div', { class: 'row', style: 'margin-bottom:4px' }, h('span', null, 'Size ' + b.size + '/' + MAX_STORE_SIZE + ' · staff need ' + need), h('button', { class: 'mini', disabled: b.size >= MAX_STORE_SIZE, onclick: () => act({ type: 'upgradeSize', id: b.id }) }, 'Enlarge ' + money(BUILDINGS.store.cost * 0.5 * b.size))),
     h('table', null, h('thead', null, h('tr', null, ['Shelf', 'Product', 'Price (ref)', 'Order', 'Supplier', 'Stock', 'Sold'].map((x, i) => h('th', { class: i > 4 ? 'num' : '' }, x)))), h('tbody', null, rows)));
 }
 
+function mallTab(b: Building): HTMLElement {
+  const v = S.view!; const m = v.malls.find(x => x.id === b.id); if (!m) return h('div', null, '…');
+  const free = MALL_UNITS - m.tenants.length; const income = m.tenants.reduce((n, x) => n + x.rent, 0);
+  const rent = h('input', { type: 'number', value: b.rent ?? 0, step: 500, style: 'width:90px' }); rent.addEventListener('change', () => act({ type: 'setRent', id: b.id, rent: +rent.value }));
+  return h('div', null,
+    h('div', { class: 'row', style: 'margin-bottom:6px' }, h('span', null, 'Asking rent per unit / month'), rent, h('span', { class: 'muted small' }, `${m.tenants.length}/${MALL_UNITS} units let · income ${money(income)}/month · condition ${m.cond}%`)),
+    h('div', { class: 'note' }, 'Existing tenants keep their rent until their lease renews (every ' + MALL_LEASE + ' months). Tenants sell one branded product each; the mall gives them extra foot traffic and boosts the pull of their brand. Maintenance keeps the mall attractive.'),
+    h('table', null, h('thead', null, h('tr', null, ['Unit', 'Tenant', 'Product', 'Rent', 'Lease until'].map((x, i) => h('th', { class: i > 2 ? 'num' : '' }, x)))),
+      h('tbody', null, Array.from({ length: MALL_UNITS }, (_, i) => { const t = m.tenants[i]; return t ? h('tr', null, h('td', null, '#' + (i + 1)), h('td', null, h('span', { class: 'tag', style: 'background:' + (companyOf(t.company)?.color ?? '#888') }), ' ' + (companyOf(t.company)?.name ?? '?')), h('td', null, t.product ? PRODUCTS[t.product].name : '—'), h('td', { class: 'num' }, t.company === m.owner ? 'own use' : money(t.rent)), h('td', { class: 'num' }, 'T' + t.leaseEnd)) : h('tr', { class: 'muted' }, h('td', null, '#' + (i + 1)), h('td', { colspan: 4 }, 'vacant')); }))),
+    free > 0 ? h('div', { style: 'margin-top:6px' }, h('b', null, 'Open a shop of your own here: '), rentControls(m)) : null);
+}
 function reportTab(b: Building): HTMLElement {
-  const r = b.report; const res = r.revenue - r.purchases - r.wages - r.maint; const prod = b.type !== 'store' && b.type !== 'rd';
+  const r = b.report; const res = r.revenue - r.purchases - r.wages - r.maint; const prod = b.type !== 'store' && b.type !== 'rd' && b.type !== 'mall';
   return h('div', null, h('div', { class: 'kv2' },
     prod && h('label', null, 'Produced') as any, prod && h('div', null, num(r.produced, 1)) as any,
     h('label', null, 'Revenue'), h('div', null, money(r.revenue)), h('label', null, 'Purchases'), h('div', null, money(r.purchases)),
@@ -280,7 +309,7 @@ function layoutTab(b: Building): HTMLElement {
   } else if (cell && cell.m && cell.m !== 'line' && cell.m !== 'import') cfg = h('div', { class: 'cellcfg' }, h('b', null, 'Cell #' + (selCell + 1) + ' · ' + MODULES[cell.m].name), workerRow());
   if (cell && (cell.m === 'line' || cell.m === 'import')) {
     if (cell.m === 'line') {
-      const sel = productSelect(PRODUCT_LIST.filter(p => p.kind !== 'raw').map(p => p.id), cell.product ?? b.product!, p => act({ type: 'setCell', id: b.id, cell: selCell, product: p }));
+      const sel = productSelect(PRODUCT_LIST.filter(p => p.kind !== 'raw').map(p => p.id), cell.product ?? b.product!, p => act({ type: 'setCell', id: b.id, cell: selCell, product: p }), true);
       const rec = cell.product ? Object.entries(PRODUCTS[cell.product].recipe).map(([k, q]) => q + ' ' + PRODUCTS[k as ProductId].name).join(' + ') : '';
       cfg = h('div', { class: 'cellcfg' }, h('b', null, 'Cell #' + (selCell + 1) + ' · production line'), h('div', { class: 'row' }, 'Makes', sel), h('div', { class: 'note' }, 'needs per unit: ' + (rec || '—')), workerRow());
     } else {

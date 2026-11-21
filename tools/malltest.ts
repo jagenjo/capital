@@ -1,0 +1,21 @@
+import { createGame, addCompany, applyAction, processTurn, DEFAULT_SETTINGS, mallInfos } from '../shared/engine.js';
+const s = createGame({ ...DEFAULT_SETTINGS, seed: 13, aiCompanies: 0, startCash: 5_000_000, targetNetWorth: 0 });
+const me = addCompany(s, { name: 'Landlord', playerId: 'm' }), you = addCompany(s, { name: 'Tenant', playerId: 'y' });
+const A = (c: any, a: any) => { const x = applyAction(s, c.id, a) as any; console.log(c.name, a.type, x.error ? 'ERR ' + x.error : 'ok'); return x; };
+const urb = [...s.world!.tiles].map((ch, i) => ch === 'u' && !s.vacant!.some(v => v.idx === i) ? i : -1).filter(i => i >= 0);
+const mall = A(me, { type: 'build', idx: urb[3], btype: 'mall' });
+A(me, { type: 'setRent', id: mall.info, rent: 12000 });
+A(you, { type: 'rentUnit', id: mall.info, product: 'bread' });
+you.brand.bread = 20;
+const grass = [...s.world!.tiles].map((ch, i) => ch === 'g' ? i : -1).filter(i => i >= 0);
+const fac = A(you, { type: 'build', idx: grass[30], btype: 'factory', product: 'bread' });
+const unit = A(you, { type: 'rentUnit', id: mall.info, product: 'bread' });
+A(you, { type: 'rentUnit', id: mall.info, product: 'bread' });
+const u = s.buildings[unit.info];
+A(you, { type: 'setSlot', id: u.id, slot: 0, product: 'bread', price: u.slots[0].price, order: 100, source: fac.info });
+A(me, { type: 'sellBuilding', id: mall.info });
+const F = s.buildings[fac.info]; F.stock.qty = 5000; F.stock.q = 60; F.product = 'bread';
+const c0 = me.cash, t0 = you.cash;
+for (let i = 0; i < 3; i++) { processTurn(s); console.log('turn', i, 'unit sold', u.slots[0].sold, 'rev', Math.round(u.report.revenue), 'maint+rent', u.report.maint, '| landlord ledger rev', Math.round(me.ledger.revenue), 'tenant maint', Math.round(you.ledger.maint)); }
+console.log('landlord cash', me.cash - c0, 'tenant cash', you.cash - t0, JSON.stringify(mallInfos(s)));
+you.brand.bread = 0; processTurn(s); console.log('after weak brand: unit exists', !!s.buildings[u.id], you.news.slice(-1)[0]?.text);

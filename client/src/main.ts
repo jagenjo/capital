@@ -5,7 +5,12 @@ import { S } from './state.js';
 import { mapScreen } from './map.js';
 import { makeWorldImage, findResources } from './worldmap.js';
 import { chainScreen } from './chain.js';
-import { buildingsScreen, marketScreen, financeScreen, marketingScreen, rankingsScreen, newsScreen } from './tabs.js';
+import { buildingsScreen, marketScreen, worldScreen, financeScreen, marketingScreen, rankingsScreen } from './tabs.js';
+import { newsScreen } from './news.js';
+import { encyclopediaScreen } from './encyclopedia.js';
+import { stocksScreen } from './stocks.js';
+import { personnelScreen } from './personnel.js';
+import { realEstateScreen } from './realestate.js';
 
 const app = document.getElementById('app')!;
 const tokens: Record<string, string> = JSON.parse(localStorage.getItem('capital.tokens') ?? '{}');
@@ -67,11 +72,11 @@ async function refresh(first: boolean) {
   if (!typing) render(); else updateTop();
 }
 
-const TABS: [string, string][] = [['map', 'Map & building'], ['buildings', 'My buildings'], ['chain', 'Supply chain'], ['market', 'Market'], ['finance', 'Finance'], ['marketing', 'Advertising'], ['rankings', 'Rankings'], ['news', 'News']];
+const TABS: [string, string][] = [['map', 'Map & building'], ['buildings', 'My buildings'], ['chain', 'Supply chain'], ['market', 'Local market'], ['world', 'World market'], ['finance', 'Finance'], ['stocks', 'Stock market'], ['personnel', 'Personnel'], ['realestate', 'Real estate'], ['marketing', 'Advertising'], ['rankings', 'Rankings'], ['news', 'News'], ['encyclopedia', 'Encyclopedia']];
 function render() {
   const v = S.view; if (!v) return;
   const me = v.me;
-  const readyBtn = h('button', { class: me.ready ? '' : 'primary', disabled: v.finished || v.paused, onclick: async () => { try { S.view = (await api.ready(S.gameId, S.token, !me.ready)).view; render(); } catch (e: any) { toast(e.message, 'err'); } } },
+  const readyBtn = h('button', { class: me.ready ? '' : 'primary', disabled: v.finished || v.paused, title: 'Shift+click: debug — play the turn right now', onclick: async (e: MouseEvent) => { try { S.view = (await api.ready(S.gameId, S.token, e.shiftKey ? true : !me.ready, e.shiftKey)).view; render(); } catch (e: any) { toast(e.message, 'err'); } } },
     me.ready ? '✔ Ready — click to unready' : 'End turn ▶');
   const top = h('div', { class: 'topbar' },
     h('img', { class: 'portrait', src: asset(`person/${String(me.portrait).padStart(2, '0')}.png`), style: `border-color:${me.color}` }),
@@ -86,10 +91,11 @@ function render() {
   const nav = h('div', { class: 'nav' }, TABS.map(([k, label]) => h('button', { class: S.tab === k ? 'active' : '', onclick: () => { S.tab = k; render(); } }, label)));
   const banner = v.finished ? h('div', { class: 'banner end' }, `🏁 Game over — ${v.endReason ?? ''} Winner: `, h('b', null, v.companies.find(c => c.id === v.winner)?.name ?? '—'))
     : me.bankrupt ? h('div', { class: 'banner' }, 'Your company went bankrupt.') : null;
-  const body = ({ map: mapScreen, buildings: buildingsScreen, chain: chainScreen, market: marketScreen, finance: financeScreen, marketing: marketingScreen, rankings: rankingsScreen, news: newsScreen } as Record<string, () => HTMLElement>)[S.tab]();
-  const sy = window.scrollY;
-  app.replaceChildren(top, nav, ...(banner ? [banner] : []), h('div', { class: S.tab === 'map' ? 'content wide' : 'content' }, body));
-  window.scrollTo(0, sy);
+  const body = ({ map: mapScreen, buildings: buildingsScreen, chain: chainScreen, market: marketScreen, world: worldScreen, finance: financeScreen, stocks: stocksScreen, personnel: personnelScreen, realestate: realEstateScreen, marketing: marketingScreen, rankings: rankingsScreen, news: newsScreen, encyclopedia: encyclopediaScreen } as Record<string, () => HTMLElement>)[S.tab]();
+  const sy = window.scrollY, oldC = app.querySelector<HTMLElement>('.content'), st = oldC && oldC.dataset.tab === S.tab ? oldC.scrollTop : 0; // the scrolling box is .content: keep its position across re-renders (5s polling)
+  const content = h('div', { class: S.tab === 'map' ? 'content wide' : 'content', 'data-tab': S.tab }, body);
+  app.replaceChildren(top, nav, ...(banner ? [banner] : []), content);
+  content.scrollTop = st; window.scrollTo(0, sy);
 }
 S.render = render;
 function countdown() {

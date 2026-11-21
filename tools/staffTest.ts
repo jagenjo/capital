@@ -1,0 +1,16 @@
+import { createGame, addCompany, applyAction, processTurn, DEFAULT_SETTINGS, advice, mgrBonus, efficiency } from '../shared/engine.js';
+const s = createGame({ ...DEFAULT_SETTINGS, seed: 13, aiCompanies: 2, startCash: 2_000_000, targetNetWorth: 0 });
+const me = addCompany(s, { name: 'Me', playerId: 'm' });
+const A = (a: any) => { const x = applyAction(s, me.id, a) as any; console.log(a.type, x.error ? 'ERR ' + x.error : 'ok'); return x; };
+const tiles = [...s.world!.tiles].map((ch, i) => ch === 'g' ? i : -1).filter(i => i >= 0);
+const f = A({ type: 'build', idx: tiles[40], btype: 'factory', product: 'bread' });
+const mg = s.candidates!.filter(p => p.kind === 'manager'), ad = s.candidates!.filter(p => p.kind === 'advisor');
+console.log('pool', mg.length, ad.length, mg[0]);
+A({ type: 'hire', id: mg[0].id }); A({ type: 'hire', id: mg[1].id }); A({ type: 'hire', id: mg[2].id }); A({ type: 'hire', id: mg[0].id });
+A({ type: 'hire', id: ad[0].id }); A({ type: 'hire', id: ad[1].id });
+const b = s.buildings[f.info];
+console.log('eff before', efficiency(s, b));
+A({ type: 'assign', id: mg[0].id, building: b.id }); console.log('bonus', mgrBonus(s, b), 'eff after', efficiency(s, b));
+for (let i = 0; i < 3; i++) processTurn(s);
+console.log('wages', me.ledger.wages, 'pool', s.candidates!.length, 'advice', advice(s, me));
+A({ type: 'fire', id: mg[0].id }); console.log('staff', me.staff!.length);

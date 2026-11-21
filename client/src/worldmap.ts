@@ -20,6 +20,9 @@ const SVG = (body: string) => '<svg viewBox="0 0 16 16" width="16" height="16" f
 // ---- value layers: population / transport availability / build price, shown as a heat map over the world (toggled with the buttons in the zoom view)
 type Layer = '' | 'pop' | 'transport' | 'price';
 let layer: Layer = '';
+// what the map draws (Show menu)
+const SHOW_OPTS: [string, string][] = [['terrain', 'Terrain'], ['rails', 'Railways'], ['lots', 'Owned lots'], ['buildings', 'Buildings'], ['cities', 'City names'], ['mines', 'Mines (ore)'], ['oil', 'Oil fields'], ['forsale', 'Facilities for sale']];
+const show: Record<string, boolean> = (() => { const d: Record<string, boolean> = {}; for (const [k] of SHOW_OPTS) d[k] = true; try { Object.assign(d, JSON.parse(localStorage.getItem('capital.show') ?? '{}')); } catch { /* defaults */ } return d; })();
 const LAYERS: { id: Layer; label: string; title: string; rgb: [number, number, number] }[] = [
   { id: 'pop', label: SVG('<circle cx="8" cy="5" r="2.6"/><path d="M3 14c0-3.5 2-5 5-5s5 1.5 5 5"/>'), title: 'Population per tile', rgb: [214, 40, 40] }, { id: 'transport', label: SVG('<rect x="3.5" y="2" width="9" height="9" rx="2"/><path d="M3.5 7h9M5.5 14l1.5-3M10.5 14L9 11"/>'), title: 'Transport availability (roads, ports, rails)', rgb: [20, 150, 230] }, { id: 'price', label: SVG('<path d="M10.5 4.5C10 3.4 9 3 8 3c-1.6 0-2.7.8-2.7 2 0 3 5.4 1.6 5.4 4.5 0 1.2-1.1 2-2.7 2-1.1 0-2.2-.5-2.7-1.6M8 1.5v13"/>'), title: 'Price to build here', rgb: [150, 60, 200] }];
 let ovCache: { key: string; cv: HTMLCanvasElement; max: number } | null = null;
@@ -135,6 +138,9 @@ export function worldPanels(miniW: number, miniH: number): { mini: HTMLElement; 
     iconBtn(ICONS.center, 'Center on selection', () => { if (S.sel != null) focusTile(S.sel); else focusCity(S.city); mainRedraw(); }),
     iconBtn(ICONS.world, 'Show the whole world', () => { cam.z = minZoom(); cam.x = 0; cam.y = 0; clampCam(); mainRedraw(); }),
     ...LAYERS.map(l => { const b = h('button', { class: 'ibtn tgl' + (layer === l.id ? ' on' : ''), title: l.title + ' — click to show / hide', onclick: () => { layer = layer === l.id ? '' : l.id; toolbar.querySelectorAll('.tgl').forEach((el, i) => el.classList.toggle('on', layer === LAYERS[i].id)); mainRedraw(); } }); b.innerHTML = l.label; return b; }));
+  const menu = h('div', { class: 'showmenu', style: 'display:none' }, SHOW_OPTS.map(([k, label]) => h('label', null, h('input', { type: 'checkbox', checked: show[k], onchange: (e: Event) => { show[k] = (e.target as HTMLInputElement).checked; localStorage.setItem('capital.show', JSON.stringify(show)); mainRedraw(); } }), ' ' + label)));
+  const showBtn = h('button', { class: 'ibtn showbtn', title: 'Show / hide map elements', onclick: () => { menu.style.display = menu.style.display === 'none' ? 'block' : 'none'; } }, 'Show ▾');
+  toolbar.append(h('div', { style: 'position:relative' }, showBtn, menu));
   const main = h('div', { class: 'frame', style: 'position:relative;width:' + W + 'px;height:' + H + 'px' }, cv, toolbar, info);
 
   // ---- world view (minimap, 1 pixel per tile image)
@@ -152,7 +158,7 @@ export function worldPanels(miniW: number, miniH: number): { mini: HTMLElement; 
 
 function tileInfo(idx: number): string {
   const v = S.view!, wd = S.world!; const t = terrainAt({ world: wd }, idx) as Terrain; const x = idx % wd.w, y = Math.floor(idx / wd.w);
-  const lot = v.lots[String(idx)]; const b = [...v.buildings, ...v.others].find(o => o.idx === idx);
+  const lot = v.lots[String(idx)]; const b = [...v.buildings.filter(x => !x.mall), ...v.others].find(o => o.idx === idx);
   const rm = railMap({ world: wd }); const rail = rm?.on[idx] ? ' · 🚆 railway' : rm && rm.comp[idx] >= 0 ? ' · near railway' : '';
   const price = TERRAIN_INFO[t].price && !rm?.on[idx] ? money(lotPrice({ cities: v.cities, world: wd }, idx)) : '';
   const tc = { cities: v.cities, world: wd }; const figs = ` · pop ${num(tilePop(tc, idx))} · transport ${tileTransport(tc, idx)}/100`;
@@ -166,7 +172,7 @@ function drawMini(cv: HTMLCanvasElement) {
   g.imageSmoothingEnabled = false; g.drawImage(wd.img, 0, 0, wd.w, wd.h, ox, oy, wd.w * k, wd.h * k);
   const mov = overlayImage(); if (mov) g.drawImage(mov.cv, 0, 0, wd.w, wd.h, ox, oy, wd.w * k, wd.h * k);
   const X = (tx: number) => ox + tx * k, Y = (ty: number) => oy + ty * k;
-  for (const b of [...v.buildings, ...v.others]) { g.fillStyle = companyOf(b.owner)?.color ?? '#000'; const s = Math.max(3, k * 1.6); g.fillRect(X(b.idx % wd.w + 0.5) - s / 2, Y(Math.floor(b.idx / wd.w) + 0.5) - s / 2, s, s); }
+  for (const b of show.buildings ? [...v.buildings.filter(x => !x.mall), ...v.others] : []) { g.fillStyle = companyOf(b.owner)?.color ?? '#000'; const s = Math.max(3, k * 1.6); g.fillRect(X(b.idx % wd.w + 0.5) - s / 2, Y(Math.floor(b.idx / wd.w) + 0.5) - s / 2, s, s); }
   for (const i of wd.res) resIcon(g, wd.tiles[i], X((i % wd.w) + 0.5), Y(Math.floor(i / wd.w) + 0.5), Math.max(5, k * 2));
   g.font = 'bold 10px system-ui'; g.textAlign = 'center'; g.lineJoin = 'round';
   for (const c of v.cities) { const x = X(c.x / WORLD_SCALE), y = Y(c.y / WORLD_SCALE); g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,.8)'; g.strokeText(c.name, x, y - 7); g.fillStyle = '#fff'; g.fillText(c.name, x, y - 7); }
@@ -238,7 +244,8 @@ function drawMain(cv: HTMLCanvasElement, hoverIdx: number) {
   g.fillStyle = '#10345f'; g.fillRect(0, 0, W, H);
   const x0 = Math.max(0, Math.floor(cam.x)), y0 = Math.max(0, Math.floor(cam.y)), x1 = Math.min(wd.w - 1, Math.ceil(cam.x + W / z)), y1 = Math.min(wd.h - 1, Math.ceil(cam.y + H / z));
   const tiles = wd.tiles; const at = (x: number, y: number) => (x < 0 || y < 0 || x >= wd.w || y >= wd.h ? 'd' : tiles[y * wd.w + x]);
-  if (z < IMG_ZOOM) {
+  if (!show.terrain) { /* flat background only */ }
+  else if (z < IMG_ZOOM) {
     // zoomed out: blit the pre-rendered 1px-per-tile image instead of drawing every tile
     g.imageSmoothingEnabled = false;
     const sx = Math.max(0, cam.x), sy = Math.max(0, cam.y), ex = Math.min(wd.w, cam.x + W / z), ey = Math.min(wd.h, cam.y + H / z);
@@ -252,7 +259,7 @@ function drawMain(cv: HTMLCanvasElement, hoverIdx: number) {
   }
   // ---- railway tracks
   const rm = railMap({ world: wd });
-  if (rm && z >= IMG_ZOOM) for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+  if (rm && show.rails && z >= IMG_ZOOM) for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
     if (!rm.on[y * wd.w + x]) continue;
     drawRail(g, x, y, (x - cam.x) * z, (y - cam.y) * z, z, (ax, ay) => ax >= 0 && ay >= 0 && ax < wd.w && ay < wd.h && !!rm.on[ay * wd.w + ax]);
   }
@@ -268,16 +275,16 @@ function drawMain(cv: HTMLCanvasElement, hoverIdx: number) {
   }
   // ---- resource icons (always visible, bigger when zoomed out)
   const isz = z >= DETAIL_ZOOM ? Math.max(10, z * 0.55) : Math.max(7, z * 1.8);
-  for (const i of wd.res) { const rx = (i % wd.w - cam.x + 0.5) * z, ry = (Math.floor(i / wd.w) - cam.y + 0.5) * z; if (rx < -10 || ry < -10 || rx > W + 10 || ry > H + 10) continue; if (z >= DETAIL_ZOOM) resIcon(g, wd.tiles[i], rx + z * 0.28, ry - z * 0.28, isz); else resIcon(g, wd.tiles[i], rx, ry, isz); }
+  for (const i of wd.res) { if (!show[wd.tiles[i] === 'o' ? 'oil' : 'mines']) continue; const rx = (i % wd.w - cam.x + 0.5) * z, ry = (Math.floor(i / wd.w) - cam.y + 0.5) * z; if (rx < -10 || ry < -10 || rx > W + 10 || ry > H + 10) continue; if (z >= DETAIL_ZOOM) resIcon(g, wd.tiles[i], rx + z * 0.28, ry - z * 0.28, isz); else resIcon(g, wd.tiles[i], rx, ry, isz); }
   // ---- ownership overlay: lots and buildings
   const px = (i: number) => ({ x: ((i % wd.w) - cam.x) * z, y: (Math.floor(i / wd.w) - cam.y) * z });
-  for (const [k, lot] of Object.entries(v.lots)) {
+  for (const [k, lot] of show.lots ? Object.entries(v.lots) : []) {
     const { x, y } = px(+k); if (x < -z || y < -z || x > W || y > H) continue;
     g.strokeStyle = companyOf(lot.owner)?.color ?? '#000';
     if (z >= 6) { g.lineWidth = Math.max(1.5, z * 0.1); g.strokeRect(x + 1, y + 1, z - 2, z - 2); } else { g.fillStyle = g.strokeStyle; g.globalAlpha = 0.55; g.fillRect(x, y, Math.max(2, z), Math.max(2, z)); g.globalAlpha = 1; }
   }
   g.textAlign = 'center'; g.textBaseline = 'middle';
-  for (const b of [...v.buildings, ...v.others]) {
+  for (const b of [...v.buildings.filter(x => !x.mall), ...v.others]) {
     const { x, y } = px(b.idx); if (x < -z || y < -z || x > W || y > H) continue;
     const col = companyOf(b.owner)?.color ?? '#000';
     if (z >= 8) {
@@ -285,10 +292,16 @@ function drawMain(cv: HTMLCanvasElement, hoverIdx: number) {
       if (z >= 12) { g.fillStyle = '#fff'; g.font = `bold ${Math.round(z * 0.5)}px system-ui`; g.fillText(BUILDINGS[b.type].letter, x + z / 2, y + z / 2 + 1); }
     } else { g.fillStyle = col; g.fillRect(x - 1, y - 1, Math.max(4, z * 0.9), Math.max(4, z * 0.9)); }
   }
+  for (const f of show.forsale ? v.vacant : []) {
+    const { x, y } = px(f.idx); if (x < -z || y < -z || x > W || y > H) continue;
+    g.setLineDash([3, 2]); g.strokeStyle = '#d4a017'; g.lineWidth = Math.max(2, z * 0.12); g.strokeRect(x + 0.5, y + 0.5, Math.max(5, z) - 1, Math.max(5, z) - 1); g.setLineDash([]);
+    if (z >= 8) { g.fillStyle = BUILDINGS[f.type].color; g.globalAlpha = 0.6; g.fillRect(x + z * 0.2, y + z * 0.2, z * 0.6, z * 0.6); g.globalAlpha = 1; }
+    if (z >= 12) { g.fillStyle = '#7a5a00'; g.font = `bold ${Math.round(z * 0.4)}px system-ui`; g.fillText('SALE', x + z / 2, y + z / 2 + 1); }
+  }
   // ---- city labels
   g.textBaseline = 'alphabetic'; g.lineJoin = 'round';
   const fs = Math.max(10, Math.min(20, z * 1.0 + 6)); g.font = `bold ${fs}px system-ui`;
-  for (const c of v.cities) {
+  for (const c of show.cities ? v.cities : []) {
     const sx = (c.x / WORLD_SCALE - cam.x), sy = (c.y / WORLD_SCALE - cam.y); const X = sx * z, Y = sy * z - c.radius * z * 0.6;
     if (X < -100 || Y < -40 || X > W + 100 || Y > H + 40) continue;
     const label = (c.port ? '⚓ ' : '') + c.name; g.lineWidth = 4; g.strokeStyle = 'rgba(0,0,0,.75)'; g.strokeText(label, X, Y); g.fillStyle = c.id === S.city ? '#ffe45c' : '#fff'; g.fillText(label, X, Y);

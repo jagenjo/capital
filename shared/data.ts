@@ -3,7 +3,8 @@
 export type ProductId =
   | 'grain' | 'livestock' | 'timber' | 'ore' | 'oil'
   | 'steel' | 'plastics' | 'electronics'
-  | 'bread' | 'meat' | 'furniture' | 'fuel' | 'clothing' | 'appliances' | 'computers' | 'cars';
+  | 'bread' | 'meat' | 'furniture' | 'fuel' | 'clothing' | 'appliances' | 'computers' | 'cars'
+  | 'phones' | 'tvs' | 'pharma' | 'robotics' | 'drones'; // the last five are hi-tech: a company must research them (R&D) before it can manufacture them
 
 export interface ProductDef {
   id: ProductId;
@@ -17,6 +18,8 @@ export interface ProductDef {
   spoil: number;        // monthly spoilage fraction of stock
   photo: string;        // asset path
   unit: string;
+  research?: number;    // hi-tech: research points a company needs (R&D building) before it may manufacture this
+  after?: ProductId;    // ...and this product must already be unlocked
   // computed
   basePrice: number;
   depth: number;
@@ -44,6 +47,12 @@ const defs: RawDef[] = [
   { id: 'appliances', name: 'Appliances', kind: 'consumer', recipe: { steel: 1, plastics: 1 }, cap: 100, workers: 12, demandPerK: 1.0, spoil: 0, photo: 'pict/j_inv.jpg', unit: 'unit' },
   { id: 'computers', name: 'Computers', kind: 'consumer', recipe: { electronics: 2, plastics: 1 }, cap: 60, workers: 14, demandPerK: 0.6, spoil: 0, photo: 'method/computer.jpg', unit: 'unit' },
   { id: 'cars', name: 'Cars', kind: 'consumer', recipe: { steel: 4, plastics: 2, electronics: 1 }, cap: 40, workers: 18, demandPerK: 0.3, spoil: 0, photo: 'pict/j_pur.jpg', unit: 'car' },
+  // hi-tech goods: locked until researched
+  { id: 'phones', name: 'Mobile phones', kind: 'consumer', recipe: { electronics: 1, plastics: 1 }, cap: 120, workers: 14, demandPerK: 0.9, spoil: 0, photo: 'method/elecomp.jpg', unit: 'lot', research: 80 },
+  { id: 'tvs', name: 'Televisions', kind: 'consumer', recipe: { electronics: 1, steel: 0.5, plastics: 1 }, cap: 80, workers: 12, demandPerK: 0.7, spoil: 0, photo: 'pict/f_tv2.jpg', unit: 'unit', research: 70 },
+  { id: 'pharma', name: 'Pharmaceuticals', kind: 'consumer', recipe: { oil: 1, plastics: 1 }, cap: 100, workers: 16, demandPerK: 0.5, spoil: 0.05, photo: 'pict/j_label.jpg', unit: 'lot', research: 120 },
+  { id: 'robotics', name: 'Robotics', kind: 'intermediate', recipe: { steel: 2, electronics: 2 }, cap: 50, workers: 16, spoil: 0, photo: 'pict/j_mft.jpg', unit: 'unit', research: 100 },
+  { id: 'drones', name: 'Drones', kind: 'consumer', recipe: { robotics: 1, electronics: 1 }, cap: 40, workers: 16, demandPerK: 0.15, spoil: 0, photo: 'pict/f_rd.jpg', unit: 'unit', research: 160, after: 'robotics' },
 ];
 
 export const PRODUCTS: Record<ProductId, ProductDef> = {} as any;
@@ -64,7 +73,7 @@ function build(id: ProductId): ProductDef {
 for (const d of defs) PRODUCT_LIST.push(build(d.id));
 export const CONSUMER_PRODUCTS = PRODUCT_LIST.filter(p => p.kind === 'consumer');
 
-export type BuildingType = 'farm' | 'forest' | 'mine' | 'oil' | 'factory' | 'store' | 'rd';
+export type BuildingType = 'farm' | 'forest' | 'mine' | 'oil' | 'factory' | 'store' | 'rd' | 'mall';
 // World tile types: d deep sea, a shallow sea, b beach, g grass, f farmland, t forest, h hills, m mountain, n snow,
 // o oil field, e ore deposit, r road, u downtown, s suburb, p port dock.
 export type Terrain = 'd' | 'a' | 'b' | 'g' | 'f' | 't' | 'h' | 'm' | 'n' | 'o' | 'e' | 'r' | 'u' | 's' | 'p';
@@ -91,6 +100,7 @@ export const BUILDINGS: Record<BuildingType, BuildingDef> = {
   oil: { type: 'oil', name: 'Oil well', cost: 300000, terrain: ['o'], products: ['oil'], maintPct: 1.0, color: '#2c2c2c', letter: 'O', photo: 'pict/f_oil.jpg', desc: 'Pumps crude oil.' },
   factory: { type: 'factory', name: 'Factory', cost: 400000, terrain: ['g', 's', 'u', 'b'], maintPct: 1.0, color: '#c0504d', letter: 'X', photo: 'pict/f_fact.jpg', desc: 'Turns inputs into intermediate or consumer goods.' },
   store: { type: 'store', name: 'Retail store', cost: 250000, terrain: ['u', 's'], maintPct: 0.9, color: '#4a7fc0', letter: 'S', photo: 'pict/f_reta.jpg', desc: 'Sells consumer goods to the city population.' },
+  mall: { type: 'mall', name: 'Shopping mall', cost: 1500000, terrain: ['u', 's'], maintPct: 0.8, color: '#b0508c', letter: 'C', photo: 'pict/f_reta.jpg', desc: 'A shopping centre with 8 units that you rent out to other companies (or use yourself). Tenants sell one branded product each and enjoy extra foot traffic.' },
   rd: { type: 'rd', name: 'R&D lab', cost: 350000, terrain: ['u', 's', 'g'], maintPct: 0.7, color: '#8a5fb5', letter: 'R', photo: 'pict/f_rd.jpg', desc: 'Researches better quality for one product.' },
 };
 export const RAW_FOR_BUILDING: Record<string, ProductId[]> = { farm: ['grain', 'livestock'], forest: ['timber'], mine: ['ore'], oil: ['oil'] };
@@ -140,3 +150,24 @@ export const MODULES: Record<ModuleType, ModuleDef> = {
   qa: { type: 'qa', name: 'Quality control', cost: 90000, max: 3, color: '#2a9d8f', letter: 'Q', adjacent: true, desc: 'Each unit linked to a line: +3 product quality.' },
   export: { type: 'export', name: 'Export / dispatch', cost: 80000, max: 3, color: '#4a8f3f', letter: 'X', adjacent: false, desc: 'Holds ONE product reaching it from a linked production line or import cell. Your other facilities can take it as a source; with "sell to everyone" other companies can buy it too.' },
 };
+
+// ---- Finance: lenders and the credit they offer. Every loan becomes a contract (see Loan in types.ts).
+export interface Lender {
+  id: string; name: string; blurb: string;
+  type: 'amortizing' | 'bullet';   // amortizing: equal principal every month + interest; bullet: interest only, whole principal due at the deadline
+  terms: number[];                 // contract lengths in months you may choose from
+  rate: number; securedRate: number; // monthly interest, unsecured / with collateral
+  base: number; nwFrac: number;    // unsecured limit = base + nwFrac x net worth
+  ltv: number;                     // extra credit per $ of pledged collateral value
+  collateral: 'none' | 'optional' | 'required';
+  min: number;
+}
+export const LENDERS: Lender[] = [
+  { id: 'fnb', name: 'First National Bank', blurb: 'Plain, sensible business loans. Cheaper when you pledge facilities.', type: 'amortizing', terms: [12, 24, 36, 60], rate: 0.0060, securedRate: 0.0042, base: 200_000, nwFrac: 0.35, ltv: 0.65, collateral: 'optional', min: 50_000 },
+  { id: 'cu', name: "Merchants' Credit Union", blurb: 'Short loans for working capital. Quick, but a bit dearer.', type: 'amortizing', terms: [6, 12, 24], rate: 0.0085, securedRate: 0.0065, base: 100_000, nwFrac: 0.2, ltv: 0.5, collateral: 'optional', min: 20_000 },
+  { id: 'dev', name: 'Development Bank', blurb: 'Very cheap long-term money, but only against collateral.', type: 'amortizing', terms: [36, 60, 120], rate: 0.0030, securedRate: 0.0030, base: 0, nwFrac: 0, ltv: 0.8, collateral: 'required', min: 200_000 },
+  { id: 'vc', name: 'Venture Capital Partners', blurb: 'Big cheques, interest only, everything back at the deadline.', type: 'bullet', terms: [12, 24], rate: 0.0110, securedRate: 0.0085, base: 500_000, nwFrac: 0.5, ltv: 0.5, collateral: 'optional', min: 250_000 },
+  { id: 'shark', name: 'Quick Cash Ltd', blurb: 'Cash today, no questions asked. Ruinous rates, back within weeks.', type: 'bullet', terms: [1, 3], rate: 0.0280, securedRate: 0.0280, base: 80_000, nwFrac: 0, ltv: 0, collateral: 'none', min: 10_000 },
+];
+
+export const MALL_UNITS = 8, MALL_MIN_BRAND = 8, MALL_FITOUT = 40000, MALL_TRAFFIC = 1.35, MALL_BRAND_BOOST = 2, MALL_LEASE = 12, MALL_PER_CITY = 2;

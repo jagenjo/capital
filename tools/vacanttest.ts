@@ -1,0 +1,14 @@
+import { createGame, addCompany, applyAction, processTurn, DEFAULT_SETTINGS } from '../shared/engine.js';
+const s = createGame({ ...DEFAULT_SETTINGS, seed: 13, aiCompanies: 2, startCash: 2_000_000, targetNetWorth: 0 });
+const me = addCompany(s, { name: 'Me', playerId: 'm' });
+console.log('initial', s.vacant!.map(v => `${v.type}/${v.product}/${v.cond}%/${v.land + v.build}`));
+for (let i = 0; i < 10; i++) processTurn(s);
+console.log('after 10 turns', s.vacant!.length, 'news', s.news.filter(n => n.tag === 'vacant').length, s.news.filter(n => n.tag === 'vacant')[0]?.text);
+const g2 = s.vacant![1]; const f = s.vacant!.find(v => v.type === 'factory') ?? g2;
+const r = applyAction(s, me.id, { type: 'buyVacant', id: f.id }) as any;
+const b = s.buildings[r.info];
+console.log('buy', r.error ?? 'ok', 'cash spent', 2_000_000 - me.cash, 'building', b?.type, b?.condition, b?.workers, b?.invested);
+console.log('again', (applyAction(s, me.id, { type: 'buyVacant', id: f.id }) as any).error);
+console.log('build on vacant tile', (applyAction(s, me.id, { type: 'build', idx: g2.idx, btype: g2.type, product: g2.product ?? undefined }) as any).error);
+const ai = s.companies[0]; const bi = Object.values(s.buildings).filter(x => x.owner === ai.id).length; ai.negMonths = 3; ai.cash = -1e9;
+const n0 = s.vacant!.length; processTurn(s); console.log('ai bldgs', bi, 'vacancies', n0, '->', s.vacant!.length, 'bankrupt', ai.bankrupt);
