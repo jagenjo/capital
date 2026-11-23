@@ -25,7 +25,7 @@ export function toast(msg: string, kind: '' | 'err' | 'ok' = '') {
   setTimeout(() => t.remove(), kind === 'err' ? 5000 : 2800);
 }
 export const cls = (v: number) => (v > 0 ? 'good' : v < 0 ? 'bad' : '');
-export const asset = (p: string) => '/assets/' + p;
+export const asset = (p: string) => 'assets/' + p;
 
 // language switch button (re-renders through the callback)
 import { lang, setLang } from './i18n.js';

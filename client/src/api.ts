@@ -1,6 +1,6 @@
 import type { View, Action } from '../../shared/types.js';
 async function call(method: string, url: string, body?: unknown, headers: Record<string, string> = {}) {
-  const r = await fetch(url, { method, headers: { 'content-type': 'application/json', ...headers }, body: body === undefined ? undefined : JSON.stringify(body) });
+  const r = await fetch(url.replace(/^\//, ''), { method, headers: { 'content-type': 'application/json', ...headers }, body: body === undefined ? undefined : JSON.stringify(body) });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`);
   return j;
