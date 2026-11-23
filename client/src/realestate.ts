@@ -5,13 +5,15 @@ import type { Vacancy, MallInfo } from '../../shared/types.js';
 import { h, money, toast } from './util.js';
 import { S, act, companyOf } from './state.js';
 import { focusTile, focusCity } from './worldmap.js';
+import { bid, orderToast } from './desk.js';
 
 const ORIGIN = { closure: 'Owner closed down', bankrupt: 'Liquidated company', estate: 'Estate sale' };
 export const newPrice = (v: Vacancy) => v.land + BUILDINGS[v.type].cost;
 export const askPrice = (v: Vacancy) => v.land + v.build;
 export const showOnMap = (v: Vacancy) => { S.city = v.city; S.sel = v.idx; S.buildingId = null; S.tab = 'map'; focusTile(v.idx, 14); S.render(); };
 export async function buy(v: Vacancy) {
-  const r = await act({ type: 'buyVacant', id: v.id });
+  const r = await act({ type: 'buyVacant', id: v.id, bid: bid.value });
+  if (orderToast(r)) return;
   if (r && r !== 'ok') { S.buildingId = r; S.sel = v.idx; S.tab = 'map'; toast(BUILDINGS[v.type].name + ' acquired', 'ok'); S.render(); }
 }
 export const vacantName = (v: Vacancy) => BUILDINGS[v.type].name + (v.product && v.type !== 'store' && v.type !== 'rd' ? ' · ' + PRODUCTS[v.product].name : '');
@@ -63,11 +65,15 @@ function mallsSection(): HTMLElement {
         h('td', null, m.tenants.map(t => t.product ? PRODUCTS[t.product].name : '').filter(Boolean).join(', ') || '—'))))) : h('div', { class: 'muted' }, 'No mall has been built yet.'));
 }
 
+let offerFocus: string | null = null, focusTimer = 0;
+/** Jump to the Real estate tab and highlight one city incentive. */
+export function showOffer(id: string) { offerFocus = id; focusTimer = 0; S.tab = 'realestate'; S.render(); }
 function subsidiesSection(): HTMLElement {
   const v = S.view!; const tb = v.me.taxBreak;
+  const focus = offerFocus; if (focus && !focusTimer) { setTimeout(() => document.querySelector(`[data-offer="${focus}"]`)?.scrollIntoView({ block: 'center' }), 0); focusTimer = window.setTimeout(() => { offerFocus = null; focusTimer = 0; }, 6000); } // highlighted for a few seconds
   return h('div', { class: 'panel', style: 'margin-top:10px' }, h('h2', null, 'City incentives (' + v.subsidies.length + ')'),
     h('div', { class: 'note' }, 'Cities reward the first company to set up a kind of business in their area: a share of the land paid, or a tax cut for some months (it applies while you keep a building in that city). Offers vanish once someone claims them or after a few months. Build normally: the reward is applied automatically.'),
     tb ? h('div', { class: 'good' }, `Your tax break: −${Math.round(tb.cut * 100)}% tax thanks to ${v.cities[tb.city].name}, until turn ${tb.until}.`) : null,
     v.subsidies.length ? h('table', null, h('thead', null, h('tr', null, ['City', 'Offer', 'Expires'].map(x => h('th', null, x)))),
-      h('tbody', null, v.subsidies.map(x => h('tr', { class: 'clickable', onclick: () => { S.city = x.city; S.sel = null; S.buildingId = null; S.tab = 'map'; focusCity(x.city); S.render(); } }, h('td', null, v.cities[x.city].name), h('td', null, subsidyText(x)), h('td', null, 'turn ' + x.expires))))) : h('div', { class: 'muted' }, 'No city is offering incentives right now.'));
+      h('tbody', null, v.subsidies.map(x => h('tr', { class: 'clickable' + (x.id === focus ? ' sel' : ''), 'data-offer': x.id, title: 'Show the city on the map', onclick: () => { S.city = x.city; S.sel = null; S.buildingId = null; S.tab = 'map'; focusCity(x.city); S.render(); } }, h('td', null, v.cities[x.city].name), h('td', null, subsidyText(x)), h('td', null, 'turn ' + x.expires))))) : h('div', { class: 'muted' }, 'No city is offering incentives right now.'));
 }

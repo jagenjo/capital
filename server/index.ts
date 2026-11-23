@@ -3,7 +3,8 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createGame, addCompany, applyAction, processTurn, DEFAULT_SETTINGS } from '../shared/engine.js';
+import { createGame, addCompany, applyAction, processTurn, DEFAULT_SETTINGS, growthStatus, seedStarter } from '../shared/engine.js';
+import { submitAction, forecast } from '../shared/desk.js';
 import type { Settings, Action } from '../shared/types.js';
 import { buildWorld } from '../shared/world.js';
 import { buildView, type GameRec, type PlayerRec } from './view.js';
@@ -30,7 +31,7 @@ function flush() {
 }
 setInterval(flush, 2000);
 // Development policy: saves in an outdated/unreadable format are discarded (no archiving) and a fresh test game is created.
-const WORLD_VERSION = 28;
+const WORLD_VERSION = 66;
 function newGame(settings: Settings, pw = ''): GameRec {
   const salt = rid(8);
   return { id: rid(4), state: createGame(settings), players: [], gameSalt: salt, gameHash: pw ? hash(pw, salt) : null, nextTurnAt: Date.now() + settings.turnIntervalHours * 3600_000, paused: false, createdAt: Date.now() };
@@ -111,7 +112,7 @@ app.post('/api/admin/games', adminAuth, wrap((req, res) => {
     aiCompanies: Math.round(n(b.aiCompanies, d.aiCompanies, 0, 8)), aiSkill: n(b.aiSkill, 1, 0.5, 1.5),
     cityCount: Math.round(n(b.cityCount, d.cityCount, 3, 16)), maxPlayers: Math.round(n(b.maxPlayers, d.maxPlayers, 1, 12)),
     turnIntervalHours: n(b.turnIntervalHours, 24, 0.01, 24 * 30), advanceWhenReady: b.advanceWhenReady !== false,
-    seed: b.seed ? Math.round(n(b.seed, 1, 1, 2 ** 31)) : Math.floor(Math.random() * 2 ** 31), events: b.events !== false,
+    seed: b.seed ? Math.round(n(b.seed, 1, 1, 2 ** 31)) : Math.floor(Math.random() * 2 ** 31), events: b.events !== false, starter: b.starter !== false,
   };
   const salt = rid(8); const pw = String(b.gamePassword ?? '');
   const g: GameRec = { id: rid(4), state: createGame(settings), players: [], gameSalt: salt, gameHash: pw ? hash(pw, salt) : null, nextTurnAt: Date.now() + settings.turnIntervalHours * 3600_000, paused: false, createdAt: Date.now() };
@@ -138,7 +139,7 @@ app.delete('/api/admin/games/:id', adminAuth, wrap((req, res) => { games.delete(
 // public
 app.get('/api/games/:id/world', wrap((req, res) => {
   const a = playerAuth(req); if (!a) return void res.status(401).json({ error: 'Not logged in' });
-  const w = a.g.state.world!; res.set('cache-control', 'private, max-age=3600'); res.json({ id: a.g.id, w: w.w, h: w.h, tiles: w.tiles, rails: w.rails ?? [] });
+  const w = a.g.state.world!; res.set('cache-control', 'private, no-cache'); res.json({ id: a.g.id, rev: w.rev ?? 0, w: w.w, h: w.h, tiles: w.tiles, qual: w.qual, rails: w.rails ?? [] });
 }));
 app.get('/api/games', wrap((_req, res) => res.json([...games.values()].map(g => ({
   id: g.id, name: g.state.settings.name, date: g.state.finished ? 'finished' : undefined, turn: g.state.turn, players: g.players.length, maxPlayers: g.state.settings.maxPlayers,
@@ -157,6 +158,7 @@ app.post('/api/games/:id/join', wrap((req, res) => {
   if (g.gameHash && !safeEq(hash(String(b.gamePassword ?? ''), g.gameSalt), g.gameHash)) return void res.status(403).json({ error: 'Wrong game password' });
   if (g.players.length >= g.state.settings.maxPlayers) return void res.status(400).json({ error: 'Game is full' });
   const company = addCompany(g.state, { name: String(b.companyName ?? '').trim().slice(0, 30) || `${name} Corp.`, playerId: name, portrait: Number.isInteger(b.portrait) ? b.portrait % 72 : undefined, color: /^#[0-9a-f]{6}$/i.test(b.color ?? '') ? b.color : undefined });
+  if (g.state.settings.starter !== false) seedStarter(g.state, company);
   const salt = rid(8); const p: PlayerRec = { id: rid(4), name, salt, hash: hash(pw, salt), token: rid(), companyId: company.id, lastSeen: Date.now() };
   g.players.push(p); g.state.news.push({ turn: g.state.turn, text: `${company.name} (${name}) enters the market.`, kind: 'info' }); save(g);
   res.json({ token: p.token });
@@ -168,10 +170,46 @@ app.get('/api/games/:id/view', wrap((req, res) => {
 app.post('/api/games/:id/action', wrap((req, res) => {
   const a = playerAuth(req); if (!a) return void res.status(401).json({ error: 'Not logged in' });
   const act = req.body as Action; if (!act || typeof act.type !== 'string') return void res.status(400).json({ error: 'Bad action' });
-  const r = applyAction(a.g.state, a.p.companyId, act);
+  const r = submitAction(a.g.state, a.p.companyId, act);
   if ('error' in r) return void res.status(400).json({ error: r.error });
   save(a.g); res.json({ ok: true, info: r.info, view: buildView(a.g, a.p.companyId) });
 }));
+app.get('/api/games/:id/forecast', wrap((req, res) => {
+  const a = playerAuth(req); if (!a) return void res.status(401).json({ error: 'Not logged in' });
+  const f = forecast(a.g.state, a.p.companyId); if (!f) return void res.status(400).json({ error: 'No forecast available' }); if ('error' in f) return void res.status(400).json(f); res.json(f);
+}));
+// growth needs of one city tile (the tile panel)
+app.get('/api/games/:id/tile/:idx', wrap((req, res) => {
+  const a = playerAuth(req); if (!a) return void res.status(401).json({ error: 'Not logged in' });
+  res.json({ turn: a.g.state.turn, growth: growthStatus(a.g.state as never, Number(req.params.idx)) });
+}));
+// the in-game console (Settings tab): cheat / debug commands for the player's own company
+const CONSOLE_HELP = ['/showmethemoney — adds $1,000,000 to your company', '/help — this list'];
+app.post('/api/games/:id/console', wrap((req, res) => {
+  const a = playerAuth(req); if (!a) return void res.status(401).json({ error: 'Not logged in' });
+  const line = String(req.body?.command ?? '').trim().slice(0, 200); const [cmd] = line.toLowerCase().split(/\s+/);
+  const c = a.g.state.companies.find(x => x.id === a.p.companyId); if (!c) return void res.status(400).json({ error: 'No company' });
+  if (cmd === '/help') return void res.json({ ok: true, output: CONSOLE_HELP });
+  if (cmd === '/showmethemoney') { c.cash += 1_000_000; save(a.g); return void res.json({ ok: true, output: ['+$1,000,000 — cash is now $' + Math.round(c.cash).toLocaleString('en-US')], view: buildView(a.g, a.p.companyId) }); }
+  res.status(400).json({ error: line ? 'Unknown command ' + (cmd || line) + '. Type /help for the list.' : 'Type a command, for example /help' });
+}));
+// ideas & suggestions from players: one JSON file next to the saves, read by the admin
+const SUGGESTIONS = path.join(path.dirname(DATA), 'suggestions.json');
+type Suggestion = { id: string; at: number; game: string; player: string; company: string; kind: string; text: string };
+const readSuggestions = (): Suggestion[] => { try { return JSON.parse(fs.readFileSync(SUGGESTIONS, 'utf8')); } catch { return []; } };
+const lastSuggest = new Map<string, number>();
+app.post('/api/games/:id/suggest', wrap((req, res) => {
+  const a = playerAuth(req); if (!a) return void res.status(401).json({ error: 'Not logged in' });
+  const kind = ['idea', 'bug', 'balance', 'other'].includes(req.body?.kind) ? String(req.body.kind) : 'idea'; const text = String(req.body?.text ?? '').trim().slice(0, 2000);
+  if (text.length < 5) return void res.status(400).json({ error: 'Write a little more, please' });
+  const now = Date.now(); if (now - (lastSuggest.get(a.p.id) ?? 0) < 10_000) return void res.status(429).json({ error: 'Please wait a few seconds before sending another one' });
+  lastSuggest.set(a.p.id, now);
+  const all = readSuggestions(); const co = a.g.state.companies.find(x => x.id === a.p.companyId);
+  all.push({ id: 's' + now.toString(36), at: now, game: a.g.state.settings.name ?? a.g.id, player: a.p.name, company: co?.name ?? '', kind, text });
+  fs.writeFileSync(SUGGESTIONS, JSON.stringify(all.slice(-1000), null, 1)); res.json({ ok: true });
+}));
+app.get('/api/admin/suggestions', adminAuth, wrap((_req, res) => res.json(readSuggestions().reverse())));
+app.delete('/api/admin/suggestions/:id', adminAuth, wrap((req, res) => { fs.writeFileSync(SUGGESTIONS, JSON.stringify(readSuggestions().filter(x => x.id !== req.params.id), null, 1)); res.json({ ok: true }); }));
 app.post('/api/games/:id/ready', wrap((req, res) => {
   const a = playerAuth(req); if (!a) return void res.status(401).json({ error: 'Not logged in' });
   const c = a.g.state.companies.find(x => x.id === a.p.companyId)!; c.ready = !!req.body?.ready; save(a.g);

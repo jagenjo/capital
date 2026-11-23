@@ -1,5 +1,7 @@
 // Encyclopedia: every product as a node, with an arrow from each ingredient to what it is made into. Click a product for details.
 import { tr } from './i18n.js';
+import { prodImg, hasPhoto } from './prodimg.js';
+import { productCard } from './prodcard.js';
 import { PRODUCTS, PRODUCT_LIST, type ProductId } from '../../shared/data.js';
 import { isUnlocked, canResearch, researchOf } from '../../shared/engine.js';
 import { h, money2, num, asset, crisp } from './util.js';
@@ -27,8 +29,17 @@ export function encyclopediaScreen(): HTMLElement {
   const draw = () => {
     g.clearRect(0, 0, W, H); g.fillStyle = '#efece0'; g.fillRect(0, 0, W, H);
     const on = rel(sel); g.textBaseline = 'middle';
+    // order: goods that are not part of the selected chain, then the links (so they run over them), then the selected chain's goods
+    const node = (p: typeof PRODUCT_LIST[number]) => {
+      const { x, y } = pos.get(p.id)!, lock = !isUnlocked(me, p.id); g.globalAlpha = on.has(p.id) ? 1 : 0.45;
+      g.fillStyle = lock ? '#e4dfcf' : '#fbfaf3'; g.fillRect(x, y, NW, NH); g.fillStyle = KCOL[p.kind]; g.fillRect(x, y, 8, NH);
+      g.strokeStyle = p.id === sel ? '#ffb000' : '#8a8470'; g.lineWidth = p.id === sel ? 3 : 1; g.strokeRect(x + .5, y + .5, NW - 1, NH - 1);
+      g.textAlign = 'left'; g.fillStyle = lock ? '#777' : '#222'; g.font = 'bold 12px system-ui'; g.fillText((lock ? '🔒 ' : '') + p.name, x + 14, y + 16, NW - 20);
+      g.fillStyle = '#666'; g.font = '10px system-ui'; g.fillText(tr(p.kind) + (p.research ? tr(' · hi-tech') : '') + ' · ' + money2(p.basePrice), x + 14, y + 32, NW - 20); g.globalAlpha = 1;
+    };
+    for (const p of PRODUCT_LIST) if (!on.has(p.id)) node(p);
     for (const pass of [0, 1]) for (const p of PRODUCT_LIST) for (const [k, q] of Object.entries(p.recipe)) {
-      const hot = p.id === sel || k === sel || (on.has(p.id) && on.has(k as ProductId) && (isAncestor(k as ProductId, sel) || isAncestor(p.id, sel))); if ((pass === 1) !== hot) continue;
+      const hot = p.id === sel || k === sel || (on.has(p.id) && on.has(k as ProductId) && (isAncestor(k as ProductId, sel) || isAncestor(p.id, sel))); if (!hot || pass === 0) continue;
       const a = pos.get(k as ProductId)!, b = pos.get(p.id)!; const x1 = a.x + NW, y1 = a.y + NH / 2, x2 = b.x, y2 = b.y + NH / 2, dx = Math.max(30, (x2 - x1) / 2);
       g.globalAlpha = hot ? 1 : 0.35; g.strokeStyle = hot ? '#c0392b' : '#6d6a5b'; g.lineWidth = hot ? 2.5 : 1.2;
       g.beginPath(); g.moveTo(x1, y1); g.bezierCurveTo(x1 + dx, y1, x2 - dx, y2, x2, y2); g.stroke();
@@ -36,20 +47,14 @@ export function encyclopediaScreen(): HTMLElement {
       const mx = (x1 + x2) / 2, my = (y1 + y2) / 2; g.font = 'bold 10px system-ui'; g.textAlign = 'center'; const t = '×' + q; const tw = g.measureText(t).width;
       g.fillStyle = '#efece0'; g.fillRect(mx - tw / 2 - 2, my - 7, tw + 4, 14); g.fillStyle = hot ? '#c0392b' : '#555'; g.fillText(t, mx, my); g.globalAlpha = 1;
     }
-    for (const p of PRODUCT_LIST) {
-      const { x, y } = pos.get(p.id)!, lock = !isUnlocked(me, p.id); g.globalAlpha = on.has(p.id) ? 1 : 0.45;
-      g.fillStyle = lock ? '#e4dfcf' : '#fbfaf3'; g.fillRect(x, y, NW, NH); g.fillStyle = KCOL[p.kind]; g.fillRect(x, y, 8, NH);
-      g.strokeStyle = p.id === sel ? '#ffb000' : '#8a8470'; g.lineWidth = p.id === sel ? 3 : 1; g.strokeRect(x + .5, y + .5, NW - 1, NH - 1);
-      g.textAlign = 'left'; g.fillStyle = lock ? '#777' : '#222'; g.font = 'bold 12px system-ui'; g.fillText((lock ? '🔒 ' : '') + p.name, x + 14, y + 16, NW - 20);
-      g.fillStyle = '#666'; g.font = '10px system-ui'; g.fillText(tr(p.kind) + (p.research ? tr(' · hi-tech') : '') + ' · ' + money2(p.basePrice), x + 14, y + 32, NW - 20); g.globalAlpha = 1;
-    }
+    for (const p of PRODUCT_LIST) if (on.has(p.id)) node(p);
   };
   const isAncestor = (a: ProductId, of: ProductId): boolean => a !== of && (!!PRODUCTS[of].recipe[a] || Object.keys(PRODUCTS[of].recipe).some(k => isAncestor(a, k as ProductId)));
-  const detail = h('div', { class: 'panel', style: 'min-width:280px;max-width:340px;align-self:flex-start' });
+  const detail = h('div', { class: 'panel', style: 'min-width:280px;max-width:410px;align-self:flex-start' });
   const showDetail = () => {
     const p = PRODUCTS[sel]; const lock = !isUnlocked(me, sel); const usedIn = PRODUCT_LIST.filter(q => q.recipe[sel]);
     const mkr = new Set<string>(); for (const o of v.listings) if (o.product === sel) mkr.add(o.company);
-    detail.replaceChildren(h('h2', null, p.name), h('img', { src: asset(p.photo), style: 'width:100%;height:120px;object-fit:cover;border:2px inset #8a8470' }),
+    detail.replaceChildren(h('h2', null, p.name), productCard(p.id, 390),
       h('div', { class: 'kv2', style: 'margin-top:6px;grid-template-columns:auto 1fr' },
         h('label', null, 'Type'), h('div', null, p.kind === 'raw' ? 'raw material' : p.kind === 'intermediate' ? 'intermediate good' : 'consumer good'),
         h('label', null, 'Made from'), h('div', null, Object.keys(p.recipe).length ? Object.entries(p.recipe).map(([k, q]) => h('div', null, q + ' × ', h('a', { href: '#', onclick: (e: Event) => { e.preventDefault(); sel = k as ProductId; draw(); showDetail(); } }, PRODUCTS[k as ProductId].name))) : 'extracted from the land (farm, forest, mine or oil well)'),
@@ -71,5 +76,5 @@ export function encyclopediaScreen(): HTMLElement {
   draw(); showDetail();
   return h('div', { class: 'col' }, h('div', { class: 'panel' }, h('h2', null, 'Encyclopedia'),
     h('div', { class: 'note' }, 'Every product and what it is made from: arrows run from an ingredient to the product made with it (×N = units per unit made). Click a product to highlight its supply tree and read its details. 🔒 hi-tech products must be researched in an R&D building before you can manufacture them.'),
-    h('div', { class: 'row', style: 'align-items:flex-start;gap:12px' }, h('div', { style: 'overflow:auto;border:2px inset #8a8470;background:#efece0;max-height:calc(100vh - 250px);flex:1;min-width:0' }, cv), detail)));
+    h('div', { class: 'row', style: 'align-items:flex-start;gap:12px' }, h('div', { 'data-keep': 'encyclopedia', style: 'overflow:auto;border:2px inset #8a8470;background:#efece0;max-height:calc(100vh - 250px);flex:1;min-width:0' }, cv), detail)));
 }

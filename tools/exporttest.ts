@@ -6,7 +6,8 @@ port.harbour = ['steel', 'plastics', 'electronics', 'grain'].map(p => ({ product
 const tiles = [...s.world!.tiles].map((ch, i) => ch === 'g' ? i : -1).filter(i => i >= 0);
 const A = (cid: string, a: any) => { const x = applyAction(s, cid, a) as any; if (x.error) console.log('ERR', JSON.stringify(a).slice(0, 100), x.error); return x; };
 const H = harbourId(port.id);
-const mk = (cid: string, idx: number) => s.buildings[A(cid, { type: 'build', idx, btype: 'factory', product: 'cars' }).info];
+const unlock = (cid: string) => { const co = s.companies.find(x => x.id === cid)!; (co.research ??= {}).cars = 999; }; // cars are hi-tech now
+const mk = (cid: string, idx: number) => (unlock(cid), s.buildings[A(cid, { type: 'build', idx, btype: 'factory', product: 'cars' }).info]);
 const b = mk(c.id, tiles[100]);
 for (const i of [1, 3, 5]) A(c.id, { type: 'setCell', id: b.id, cell: i, source: H });
 A(c.id, { type: 'setModule', id: b.id, cell: 2, module: 'export' }); A(c.id, { type: 'setLink', id: b.id, a: 1, b: 2, on: true });

@@ -1,15 +1,15 @@
 // "Selected tile stats" area (bottom-left): photo, owner, key figures and a 12-month profit chart.
 import { tr } from './i18n.js';
-import { BUILDINGS, PRODUCTS, TERRAIN_INFO, MODULES, type Terrain } from '../../shared/data.js';
-import { capacity, requiredWorkers, slotCapacity, terrainAt, railMap, tilePop, tileTransport, lotPrice, RAIL_SHIP_MUL } from '../../shared/engine.js';
+import { prodImg, hasPhoto, facImg, terrImg, personImg } from './prodimg.js';
+import { BUILDINGS, defOf, PRODUCTS, TERRAIN_INFO, MODULES, type Terrain } from '../../shared/data.js';
+import { capacity, requiredWorkers, slotCapacity, terrainAt, railMap, tilePop, tileTransport, lotPrice, RAIL_SHIP_MUL, tileQuality, tilePollution, QUALITY_NAME, tileHaul, HAUL_RAIL, shopReach } from '../../shared/engine.js';
 import type { Building } from '../../shared/types.js';
-import { h, money, num, asset, cls, crisp } from './util.js';
+import type { ProductId } from '../../shared/data.js';
+import { h, money, money2, num, asset, cls, crisp } from './util.js';
 import { S, companyOf } from './state.js';
+import { api } from './api.js';
+import { tileCtx } from './worldmap.js';
 
-const TERRAIN_PHOTO: Record<string, string> = {
-  u: 'urban.jpg', s: 'suburb.jpg', g: 'l_grass.jpg', f: 'f_farm.jpg', t: 'f_fore.jpg', h: 'l_hill.jpg', m: 'l_hill2.jpg', e: 'f_mine.jpg', o: 'f_oil.jpg',
-  b: 'l_grasea.jpg', a: 'l_sea.jpg', d: 'l_sea2.jpg', n: 'l_hill2.jpg', r: 'l_grass2.jpg', p: 'f_sea2.jpg',
-};
 const PHOTO_H = 'height:clamp(80px,15vh,140px)';
 
 export function miniChart(values: number[], w: number, hgt: number, color = '#c0392b'): HTMLCanvasElement {
@@ -34,12 +34,12 @@ function companyBox(owner: string) {
   const c = companyOf(owner); if (!c) return h('div');
   return h('div', { class: 'row', style: 'gap:6px' },
     h('div', { class: 'logo', style: 'background:' + c.color }, c.name.slice(0, 1)),
-    h('img', { src: asset('person/' + String(c.portrait).padStart(2, '0') + '.png'), style: 'width:56px;height:56px;border:2px solid ' + c.color + ';image-rendering:pixelated' }),
+    personImg(c.portrait, 56, 'border:2px solid ' + c.color),
     h('div', null, h('b', null, c.name), h('div', { class: 'note' }, c.isAI ? 'AI company' : 'Player')));
 }
 
 function buildingStats(b: Building): HTMLElement {
-  const v = S.view!; const def = BUILDINGS[b.type]; const city = v.cities[b.city]; const need = requiredWorkers(b);
+  const v = S.view!; const def = defOf(b); const city = v.cities[b.city]; const need = requiredWorkers(b);
   let units = '', util = 0, quality = '–';
   if (b.type === 'store') {
     const caps = b.slots.filter(s => s.product).reduce((a, s) => a + slotCapacity(b, s.product!), 0);
@@ -52,14 +52,16 @@ function buildingStats(b: Building): HTMLElement {
   const mods = b.layout ? Object.values(MODULES).map(m => [m.name, b.layout!.filter(x => x.m === m.type).length] as const).filter(x => x[1]).map(x => x[1] + '× ' + x[0]).join(', ') : '';
   return h('div', { class: 'statgrid' },
     h('div', { class: 'col', style: 'flex:none;width:236px;gap:4px' },
-      h('img', { src: asset(b.product && b.type !== 'store' && b.type !== 'rd' ? PRODUCTS[b.product].photo : def.photo), style: 'width:236px;' + PHOTO_H + ';object-fit:cover;border:2px inset #8a8470' }),
+      b.product && b.type !== 'store' && b.type !== 'rd' && hasPhoto(b.product) ? prodImg(b.product, 236, 112, 'border:2px inset #8a8470') : facImg(b.type, 236, 112, 'border:2px inset #8a8470'),
       h('div', { class: 'deptname' }, b.name), h('div', { class: 'chartlabel' }, 'Result — past 12 months'), miniChart(b.hist ?? [], 236, 96)),
     h('div', { class: 'col grow', style: 'gap:6px;min-width:0' }, companyBox(b.owner),
       kvRows([['Employees', b.workers + (b.type === 'rd' ? '' : ' / ' + need)], ['Units', units], ['Unit level (robots)', String(Math.round(b.auto * 10) / 10)],
+        ...(b.type === 'store' ? [['Customers from', (shopReach(b) * 2 + 1) + '×' + (shopReach(b) * 2 + 1) + ' tiles around']] as [string, string][] : []),
         ['Utilization', b.type === 'rd' ? '+' + util.toFixed(2) + ' tech' : Math.round(util * 100) + '%'], ['Stock', num(stock)], ['Quality', quality], ['Condition', b.condition.toFixed(0) + '%'],
         ['Last month result', h('span', { class: cls(res) }, money(res))], ['Population here', num(tilePop({ cities: v.cities, world: S.world! }, b.idx))], ['Transport availability', tileTransport({ cities: v.cities, world: S.world! }, b.idx) + ' / 100'], ['Price to build here', money(lotPrice({ cities: v.cities, world: S.world! }, b.idx))], ['Railway', (railMap({ world: S.world! })?.comp[b.idx] ?? -1) >= 0 ? 'connected: rail tiles cost 1, ×' + RAIL_SHIP_MUL + ' shipments' : 'none nearby'], ['City', city.name]]),
       mods ? h('div', { class: 'note' }, 'Facility: ' + mods) : null,
-      b.type === 'store' ? h('div', { class: 'row', style: 'gap:4px' }, b.slots.filter(sl => sl.product).map(sl => h('img', { src: asset(PRODUCTS[sl.product!].photo), title: PRODUCTS[sl.product!].name + ' · stock ' + num(sl.stock.qty), style: 'width:48px;height:36px;object-fit:cover;border:2px inset #8a8470' }))) : null));
+      growthBox(b.idx),
+      b.type === 'store' ? h('div', { class: 'row', style: 'gap:4px' }, b.slots.filter(sl => sl.product).map(sl => prodImg(sl.product!, 48, 36, 'border:2px inset #8a8470', PRODUCTS[sl.product!].name + ' · stock ' + num(sl.stock.qty)))) : null));
 }
 
 function overview(): HTMLElement {
@@ -72,14 +74,36 @@ function overview(): HTMLElement {
       h('div', { class: 'note' }, 'Click a tile in the zoom view to see its stats here and configure it on the right.')));
 }
 
+/** Haul cost of a tile: what it costs to cross it, and the cheapest route cost from its nearest city centre. */
+function haulRows(idx: number): [string, string][] {
+  const t = tileHaul({ cities: S.view!.cities, world: S.world! }, idx);
+  return [['Transport cost (this tile)', String(t.step) + (t.step === HAUL_RAIL ? ' (rail / city)' : '')], ['Transport cost from ' + S.view!.cities[t.city].name, t.toCity == null ? 'no land route' : String(t.toCity)]];
+}
+/** Growth needs of a downtown / suburb tile: each need as a bar (filled = what the tile has, tick = what it takes). */
+const growthCache = new Map<string, Awaited<ReturnType<typeof api.tile>>['growth'] | 'loading'>();
+function growthBox(idx: number): HTMLElement | null {
+  const v = S.view!; const t = terrainAt({ world: S.world! }, idx); if (t !== 's' && t !== 'u' && t !== 'l' && t !== 'w') return null;
+  const key = v.turn + ':' + v.worldRev + ':' + idx; const hit = growthCache.get(key);
+  if (hit === undefined) { growthCache.set(key, 'loading'); api.tile(S.gameId, S.token, idx).then(r => { growthCache.set(key, r.growth); S.render(); }).catch(() => growthCache.delete(key)); }
+  if (!hit || hit === 'loading') return h('div', { class: 'col', style: 'gap:2px' }, h('div', { class: 'chartlabel' }, 'Growth'), h('div', { class: 'note' }, 'Loading…'));
+  const g = hit;
+  return h('div', { class: 'col', style: 'gap:2px' }, h('div', { class: 'chartlabel' }, 'Growth · ' + g.stage), h('div', { class: 'note' }, g.shops ? 'Reached by ' + g.shops + ' shop' + (g.shops > 1 ? 's' : '') + '. Units sold to this tile last month by real shops / units it needs:' : 'No shop reaches this tile: build one within 3 tiles (supermarkets 4, mall units 5).'),
+    h('table', { class: 'stats growth' }, h('tbody', null, g.items.map(it => { const ok = it.need > 0 ? it.ok : true;
+      return h('tr', null, h('th', null, it.product ? [prodImg(it.product, 24, 16, 'margin-right:5px'), it.label] : it.label), h('td', null, h('div', { class: 'gbar', title: it.need > 0 ? 'needs ' + it.need : '' }, h('div', { style: `width:${Math.round(Math.min(1, it.have / it.max) * 100)}%;background:${it.need > 0 ? (ok ? '#4a8f3f' : '#c0504d') : '#6b8fc4'}` }), it.need > 0 ? h('i', { style: `left:${Math.round(Math.min(1, it.need / it.max) * 100)}%` }) : null)), h('td', { class: 'num ' + (it.need > 0 ? (ok ? 'good' : 'bad') : '') }, it.text)); }))));
+}
 function tileInfo(idx: number): HTMLElement {
   const v = S.view!, wd = S.world!; const t = terrainAt({ world: wd }, idx) as Terrain; const city = v.cities[S.city];
   const lot = v.lots[String(idx)]; const other = v.others.find(o => o.idx === idx);
   return h('div', { class: 'statgrid' },
-    h('div', { class: 'col', style: 'flex:none;width:236px;gap:4px' }, h('img', { src: asset('pict/' + TERRAIN_PHOTO[t]), style: 'width:236px;' + PHOTO_H + ';object-fit:cover;border:2px inset #8a8470' }), h('div', { class: 'deptname' }, TERRAIN_INFO[t].name),
-      other ? h('div', { class: 'note' }, other.name + (other.product ? ' · ' + PRODUCTS[other.product].name : '')) : null),
+    h('div', { class: 'col', style: 'flex:none;width:236px;gap:4px' }, other ? (other.product && other.type !== 'store' && other.type !== 'rd' && hasPhoto(other.product) ? prodImg(other.product, 236, 112, 'border:2px inset #8a8470') : facImg(other.type, 236, 112, 'border:2px inset #8a8470')) : terrImg(t, 236, 112, 'border:2px inset #8a8470'), h('div', { class: 'deptname' }, other ? other.name : TERRAIN_INFO[t].name),
+      other ? h('div', { class: 'note' }, TERRAIN_INFO[t].name) : null,
+      null),
     h('div', { class: 'col grow', style: 'gap:6px;min-width:0' }, lot ? companyBox(lot.owner) : h('div', { class: 'note' }, TERRAIN_INFO[t].price ? 'Unowned land' : 'Not buildable'),
-      kvRows([['Tile', (idx % wd.w) + ', ' + Math.floor(idx / wd.w)], ['Population here', num(tilePop({ cities: v.cities, world: wd }, idx))], ['Transport availability', tileTransport({ cities: v.cities, world: wd }, idx) + ' / 100'], ['Price to build here', TERRAIN_INFO[t].price ? money(lotPrice({ cities: v.cities, world: wd }, idx)) : 'not buildable'], ['Nearest city', city.name], ['Population', num(city.pop)], ['Wealth index', city.wealth.toFixed(2)], ['Local wage', '$' + num(v.cityWages[city.id])],
+      h('div', { class: 'chartlabel' }, 'This tile'),
+      kvRows([['Position', (idx % wd.w) + ', ' + Math.floor(idx / wd.w)], ...(tileQuality(tileCtx(), idx) != null ? [[QUALITY_NAME[t], Math.round(tileQuality(tileCtx(), idx)! * 100) + '%']] as [string, string][] : []), ['Population here', num(tilePop(tileCtx(), idx))], ['Transport availability', tileTransport(tileCtx(), idx) + ' / 100'], ['Pollution', Math.round(tilePollution(tileCtx(), idx) * 100) + '%'], ...haulRows(idx), ['Price to build here', TERRAIN_INFO[t].price ? money(lotPrice(tileCtx(), idx)) : 'not buildable']]),
+      growthBox(idx),
+      h('div', { class: 'chartlabel' }, 'Nearest city: ' + city.name),
+      kvRows([['Population', num(city.pop)], ['Wealth index', city.wealth.toFixed(2)], ['Local wage', '$' + num(v.cityWages[city.id])],
         ['Labour used', num(v.cityLabor[city.id].used) + ' / ' + num(v.cityLabor[city.id].pool)], ['Port', city.port ? 'yes — harbour for imports' : 'no']])));
 }
 

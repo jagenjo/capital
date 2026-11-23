@@ -1,7 +1,8 @@
 // Advertising: brand campaigns are bought as contracts with newspapers, radio and TV stations.
+import { contractDoc, contractFolder, dateOfTurn } from './contract.js';
 import { PRODUCTS, PRODUCT_LIST, MEDIA, MEDIA_TERMS, MEDIA_DISCOUNT, MEDIA_CANCEL_MONTHS } from '../../shared/data.js';
 import type { ProductId } from '../../shared/data.js';
-import { h, money, asset } from './util.js';
+import { h, money } from './util.js';
 import { S, act } from './state.js';
 import { icon } from './icons.js';
 
@@ -18,8 +19,7 @@ export function marketingScreen(): HTMLElement {
   const next = (p: ProductId) => Math.min(100, me.brand[p] * 0.92 + 0.8 * Math.sqrt(power(p) / 100));
 
   const summary = h('div', { class: 'panel' }, h('h2', null, icon('marketing'), 'Advertising — ' + money(fees) + ' / month'),
-        h('div', { class: 'note' }, 'Brand awareness boosts how attractive your shelves are against competitors. It decays 8% per month, so campaigns must be sustained. Advertising is bought through contracts with media outlets: the money you pay has diminishing returns (square-root curve), and the longer the term the cheaper the fee.'),
-    h('img', { class: 'hero', src: asset('title/t_ads.jpg'), style: 'height:110px;max-width:600px;margin-top:8px' }));
+        h('div', { class: 'note' }, 'Brand awareness boosts how attractive your shelves are against competitors. It decays 8% per month, so campaigns must be sustained. Advertising is bought through contracts with media outlets: the money you pay has diminishing returns (square-root curve), and the longer the term the cheaper the fee.'));
 
   const prodTable = h('div', { class: 'panel' }, h('h2', null, 'Campaigns by product'),
     h('table', null, h('thead', null, h('tr', null, ['Product', 'Brand', 'Next month', 'Tech', 'Media contracts'].map(x => h('th', null, x)))), h('tbody', null,
@@ -53,10 +53,22 @@ export function marketingScreen(): HTMLElement {
 
   const mine = h('div', { class: 'panel' }, h('h2', null, 'Your contracts (' + v.adContracts.length + ')'),
     v.adContracts.length === 0 ? h('div', { class: 'muted' }, 'No media contracts yet.') :
-      h('table', null, h('thead', null, h('tr', null, ['Outlet', 'Product', 'Fee', 'Started', 'Ends', ''].map(x => h('th', null, x)))), h('tbody', null,
-        v.adContracts.map(x => { const m = mediaOf(x.media); return h('tr', null, h('td', null, icon(m.kind === 'newspaper' ? 'news' : m.kind), m.name), h('td', null, PRODUCTS[x.product].name), h('td', { class: 'num' }, money(x.fee) + ' / month'),
-          h('td', null, 'turn ' + x.start), h('td', null, 'turn ' + x.end + ' (' + (x.end - v.turn) + ' mo)'),
-          h('td', null, h('button', { class: 'mini danger', onclick: () => { if (confirm('Cancel this contract? Penalty: ' + money(x.fee * MEDIA_CANCEL_MONTHS) + '.')) act({ type: 'cancelAd', id: x.id }); } }, 'Cancel'))); }))));
+      contractFolder(v.adContracts.map(x => { const m = mediaOf(x.media); const months = x.end - x.start;
+        return { key: 'ad:' + x.id, title: 'Advertising agreement', status: { text: (x.end - v.turn) + ' mo left', cls: 'ok' },
+          headline: [h('b', null, PRODUCTS[x.product].name), ' in ', h('b', null, m.name), ' · ', money(x.fee) + '/mo', ' · until ', dateOfTurn(x.end)],
+          doc: () => contractDoc({
+          title: 'Advertising agreement', no: x.id.toUpperCase(), turn: x.start,
+          me: { name: v.me.name, seed: v.me.id, signed: true, role: 'the Advertiser' },
+          other: { name: m.name, seed: 'media:' + m.id, signed: true, role: 'the Publisher' },
+          clauses: [
+            ['The Publisher runs advertising for the Advertiser\'s ', h('b', null, PRODUCTS[x.product].name.toLowerCase()), ' in ', h('b', null, m.name), '.'],
+            ['The Advertiser pays ', h('b', null, money(x.fee)), ' every month.'],
+            ['This agreement runs for ', h('b', null, months + ' months'), ', from ', h('b', null, dateOfTurn(x.start)), ' to ', h('b', null, dateOfTurn(x.end)), '.'],
+            ['Cancelling early costs ', h('b', null, MEDIA_CANCEL_MONTHS + ' months'), ' of fee (', h('b', null, money(x.fee * MEDIA_CANCEL_MONTHS)), ').'],
+          ],
+          foot: h('span', null, 'Months left: ', h('b', null, String(x.end - v.turn))),
+          actions: [h('button', { class: 'mini danger', onclick: () => { if (confirm('Cancel this contract? Penalty: ' + money(x.fee * MEDIA_CANCEL_MONTHS) + '.')) act({ type: 'cancelAd', id: x.id }); } }, 'Cancel')],
+        }) }; }), 'No media contracts yet.'));
 
-  return h('div', null, summary, prodTable, media, mine);
+  return h('div', null, summary, h('div', { class: 'grid2', style: 'align-items:start' }, prodTable, mine), media);
 }

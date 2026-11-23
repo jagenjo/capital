@@ -1,7 +1,9 @@
 // Stock market: every company is listed. Buy and sell shares of the others; issue or buy back your own.
-import { SHARE_SPREAD, SHARE_IMPACT, MIN_OWN } from '../../shared/engine.js';
+import { SHARE_SPREAD, SHARE_IMPACT } from '../../shared/engine.js';
 import { h, money, money2, num, crisp } from './util.js';
 import { S, act, companyOf } from './state.js';
+import { bid, bidInput, orderToast } from './desk.js';
+import { pie } from './analytics.js';
 
 let sel = ''; let qty = 1000;
 const pct = (x: number) => (x >= 0 ? '+' : '') + (x * 100).toFixed(1) + '%';
@@ -25,10 +27,23 @@ export function stocksScreen(): HTMLElement {
       h('div', { class: 'panel' }, h('h2', null, 'Stock market'),
         h('div', { class: 'kv' }, h('label', null, 'Your cash'), h('div', null, money(me.cash)), h('label', null, 'Portfolio value'), h('b', null, money(folioValue))),
         h('table', null, h('thead', null, h('tr', null, ['Company', 'Price', 'Month', 'Market cap', 'For sale', 'Last dividend', 'You hold', 'Value'].map((x, i) => h('th', { class: i ? 'num' : '' }, x)))), h('tbody', null, rows)),
-        h('div', { class: 'note' }, 'Prices follow each company\'s net worth and recent profits. Trading moves the price a little and costs a ' + (SHARE_SPREAD * 100) + '% spread. Only shares on the market ("for sale") can be bought. Outside shareholders receive their part of the dividend at the fiscal year end (December); AI companies list 30% of their shares from the start.'))),
-    h('div', { class: 'col' }, detail(t)));
+        h('div', { class: 'note' }, 'Prices follow each company\'s net worth and recent profits. Trading moves the price a little and costs a ' + (SHARE_SPREAD * 100) + '% spread. Only shares on the market ("for sale") can be bought; the owners of AI companies also sell their own shares at a 50% premium. Holding more than 50% of a company merges it into yours (its other investors are bought out). Outside shareholders receive their part of the dividend at the fiscal year end (December); AI companies list 30% of their shares from the start.')),
+      ownersPanel(me.id)),
+    h('div', { class: 'col' }, detail(t), t.id !== me.id ? ownersPanel(t.id) : null));
 }
 
+/** Who owns a company: its own treasury, other companies, and the public (shares on the market). */
+function ownersPanel(id: string): HTMLElement {
+  const v = S.view!; const c = v.companies.find(x => x.id === id)!; const isMe = id === v.me.id;
+  const treas = Math.max(0, c.shares - c.float - c.held);
+  const slices = [{ label: (isMe ? 'You (' + c.name + ')' : c.name + ' itself'), value: treas, color: c.color },
+    ...c.holders.map(x => ({ label: (companyOf(x.id)?.name ?? x.id) + (x.id === v.me.id ? ' (you)' : ''), value: x.qty, color: companyOf(x.id)?.color })),
+    { label: 'Public investors (on the market)', value: c.float, color: '#ffffff' }];
+  const top = c.holders.reduce((m, x) => x.qty > m.qty ? x : m, { id: '', qty: 0 });
+  return h('div', { class: 'panel' }, h('h2', null, isMe ? 'Who owns your company' : 'Who owns ' + c.name), pie(slices, n => num(Math.round(n)) + ' sh', 170),
+    isMe && top.qty / c.shares > 0.3 ? h('div', { class: 'bad small' }, '⚠ ' + (companyOf(top.id)?.name ?? '?') + ' owns ' + (top.qty / c.shares * 100).toFixed(1) + '% of your shares: above 50% they take over your company.') : null,
+    h('div', { class: 'note' }, 'Shares the company still holds itself (treasury), the stakes other companies bought, and the shares in public hands that anyone can buy.'));
+}
 function detail(t: NonNullable<ReturnType<typeof companyOf>> & any): HTMLElement {
   const v = S.view!; const me = v.me; const c = v.companies.find(x => x.id === t.id)!; const isMe = c.id === me.id;
   const have = isMe ? 0 : me.portfolio?.[c.id] ?? 0;
@@ -45,9 +60,9 @@ function detail(t: NonNullable<ReturnType<typeof companyOf>> & any): HTMLElement
       h('label', null, 'Investors'), h('div', null, holders.length ? holders : 'none'), h('label', null, 'Net worth'), h('div', null, money(c.netWorth))),
     h('div', { class: 'row', style: 'margin-top:8px' }, 'Shares', input,
       isMe ? [h('button', { class: 'primary', onclick: () => act({ type: 'issueShares', qty }) }, 'Issue (sell to market)'), h('button', { onclick: () => act({ type: 'buybackShares', qty }) }, 'Buy back')]
-        : [h('button', { class: 'primary', onclick: () => act({ type: 'buyShares', company: c.id, qty }) }, 'Buy'), h('button', { onclick: () => act({ type: 'sellShares', company: c.id, qty }) }, 'Sell'), h('button', { onclick: () => act({ type: 'sellShares', company: c.id, qty: have }) }, 'Sell all')]),
+        : [h('button', { class: 'primary', onclick: async () => { orderToast(await act({ type: 'buyShares', company: c.id, qty, bid: bid.value })); } }, 'Order'), bidInput(), h('button', { onclick: () => act({ type: 'sellShares', company: c.id, qty }) }, 'Sell'), h('button', { onclick: () => act({ type: 'sellShares', company: c.id, qty: have }) }, 'Sell all')]),
     h('div', { class: 'note' }, isMe
-      ? 'Issuing sells your own shares to investors for cash (price moves ~' + (impact * 100).toFixed(1) + '%, 3% fee); you must keep ' + Math.round(MIN_OWN * 100) + '%. Buying back takes them off the market again. Outside shareholders get dividends; set the payout in Finance.'
+      ? 'Issuing sells your own shares to investors for cash (price moves ~' + (impact * 100).toFixed(1) + '%, 3% fee). Buying back takes them off the market again. Outside shareholders get dividends; set the payout in Finance. Careful: if one investor ends up holding more than 50% of your shares, they take over your company and you lose.'
       : 'You hold ' + num(have) + ' shares (' + money(have * c.price) + '). Buying ' + num(qty) + ' costs about ' + money(qty * buyPx * (1 + SHARE_SPREAD)) + '; selling raises about ' + money(qty * sellPx * (1 - SHARE_SPREAD)) + '.'));
 }
 

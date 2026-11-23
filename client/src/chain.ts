@@ -1,7 +1,7 @@
 // "Supply chain" tab: every production line, farm, mine and shop of yours as a node, with a link wherever a good flows from a source to a user.
 import { tr } from './i18n.js';
-import { PRODUCTS, BUILDINGS, type ProductId } from '../../shared/data.js';
-import { adj8, isLinked } from '../../shared/engine.js';
+import { PRODUCTS, BUILDINGS, defOf, type ProductId } from '../../shared/data.js';
+import { adj8, gridN, isLinked, flowsTo } from '../../shared/engine.js';
 import type { Building } from '../../shared/types.js';
 import { h, num, crisp } from './util.js';
 import { S, companyOf } from './state.js';
@@ -21,11 +21,11 @@ function graph() {
     if (b.type === 'rd') continue;
     if (b.type === 'store') add({ id: 'b:' + b.id, kind: 'store', label: b.name, sub: 'shop · ' + city(b.city), color: BUILDINGS.store.color, b });
     else if (b.type === 'factory' && b.layout) b.layout.forEach((c, i) => { if (c.m === 'line' && c.product) add({ id: 'l:' + b.id + ':' + i, kind: 'line', label: PRODUCTS[c.product].name, sub: b.name + ' · line #' + (i + 1), color: BUILDINGS.factory.color, product: c.product, b }); });
-    else add({ id: 'b:' + b.id, kind: 'bld', label: PRODUCTS[b.product!]?.name ?? b.name, sub: b.name, color: BUILDINGS[b.type].color, product: b.product ?? undefined, b });
+    else add({ id: 'b:' + b.id, kind: 'bld', label: PRODUCTS[b.product!]?.name ?? b.name, sub: b.name, color: defOf(b).color, product: b.product ?? undefined, b });
   }
   const lineOf = (b: Building, p: ProductId, near?: number): string | null => {
     if (!b.layout) return null; let first: number | null = null;
-    for (let i = 0; i < b.layout.length; i++) if (b.layout[i].m === 'line' && b.layout[i].product === p) { if (first == null) first = i; if (near != null && adj8(near).includes(i) && isLinked(b, near, i)) return 'l:' + b.id + ':' + i; }
+    for (let i = 0; i < b.layout.length; i++) if (b.layout[i].m === 'line' && b.layout[i].product === p) { if (first == null) first = i; if (near != null && adj8(near, gridN(b)).includes(i) && isLinked(b, near, i)) return 'l:' + b.id + ':' + i; }
     return first == null ? null : 'l:' + b.id + ':' + first;
   };
   // 2) resolve a source string to a node id (creating harbour / foreign nodes on demand)
@@ -44,11 +44,8 @@ function graph() {
     else if (b.type === 'factory' && b.layout) {
       const L = b.layout;
       L.forEach((c, i) => {
-        if (c.m === 'import' && c.product && c.source) for (const j of adj8(i)) if (isLinked(b, i, j) && L[j].m === 'line') link(c.source, 'l:' + b.id + ':' + j, c.product);
-        if (c.m === 'line' && c.product) for (const j of adj8(i)) if (j > i && isLinked(b, i, j) && L[j].m === 'line' && L[j].product) {
-          if (PRODUCTS[L[j].product!].recipe[c.product]) edges.push({ from: 'l:' + b.id + ':' + i, to: 'l:' + b.id + ':' + j, product: c.product });
-          else if (PRODUCTS[c.product].recipe[L[j].product!]) edges.push({ from: 'l:' + b.id + ':' + j, to: 'l:' + b.id + ':' + i, product: L[j].product! });
-        }
+        if (c.m === 'import' && c.product && c.source) for (const j of adj8(i, gridN(b))) if (flowsTo(b, i, j) && L[j].m === 'line') link(c.source, 'l:' + b.id + ':' + j, c.product);
+        if (c.m === 'line' && c.product) for (const j of adj8(i, gridN(b))) if (flowsTo(b, i, j) && L[j].m === 'line' && L[j].product && PRODUCTS[L[j].product!].recipe[c.product]) edges.push({ from: 'l:' + b.id + ':' + i, to: 'l:' + b.id + ':' + j, product: c.product }); // an arrow from the line that makes an ingredient
       });
     } else if (b.type !== 'rd') for (const [p, src] of Object.entries(b.sources)) if (src) link(src, 'b:' + b.id, p as ProductId);
   }
@@ -86,7 +83,9 @@ export function chainScreen(): HTMLElement {
     for (const n of gr.ns) {
       const dim = hov && hov !== n.id && !gr.edges.some(e => (e.from === hov && e.to === n.id) || (e.to === hov && e.from === n.id));
       g.globalAlpha = dim ? 0.35 : 1; g.fillStyle = '#fbfaf3'; g.fillRect(n.x, n.y, NW, NH); g.fillStyle = n.color; g.fillRect(n.x, n.y, 8, NH);
-      g.strokeStyle = n.id === hov ? '#ffb000' : n.b && n.b.idx === S.sel ? '#1f4e8c' : '#8a8470'; g.lineWidth = n.id === hov || (n.b && n.b.idx === S.sel) ? 3 : 1; g.strokeRect(n.x + .5, n.y + .5, NW - 1, NH - 1);
+      // outline in the colour of the company that owns it (yours, or the rival supplier's); harbours belong to nobody: no outline. Hover lights up orange.
+      const own = n.b ? S.view!.me.color : n.kind === 'ext' ? n.color : '';
+      if (own || n.id === hov) { const sel = n.b && n.b.idx === S.sel; g.strokeStyle = n.id === hov ? '#ffb000' : own; g.lineWidth = n.id === hov || sel ? 3 : 2; g.strokeRect(n.x + 1, n.y + 1, NW - 2, NH - 2); }
       g.textAlign = 'left'; g.textBaseline = 'alphabetic'; g.fillStyle = '#222'; g.font = 'bold 12px system-ui'; g.fillText(n.label, n.x + 14, n.y + 17, NW - 20);
       g.fillStyle = '#666'; g.font = '10px system-ui'; g.fillText(n.sub, n.x + 14, n.y + 30, NW - 20);
       if (n.b && n.kind !== 'store' && n.kind !== 'harbour') { const fin = n.kind === 'bld' || n.product === n.b.product; if (fin) { g.fillStyle = '#444'; g.fillText('stock ' + num(n.b.stock.qty), n.x + 14, n.y + 42, NW - 20); } }
@@ -103,5 +102,5 @@ export function chainScreen(): HTMLElement {
   return h('div', { class: 'col' }, h('div', { class: 'panel' }, h('h2', null, 'Supply chain'),
     h('div', { class: 'note' }, 'Nodes: your production lines (factories, one per line), farms, mines and shops, plus the harbours and other companies you buy from. A link means goods flow from the source to the user along that connection. Hover to highlight a node\'s links, click a node to open its building.'),
     unsupplied.length ? h('div', { class: 'bad small' }, unsupplied.map(n => h('div', null, '⚠ ' + n.sub + ' · ' + n.label + ': no supply of ' + n.missing.join(', ')))) : h('div', { class: 'good small' }, '✓ Every input has a source.'),
-    h('div', { style: 'overflow:auto;border:2px inset #8a8470;background:#efece0;max-height:calc(100vh - 260px)' }, cv)));
+    h('div', { 'data-keep': 'chain', style: 'overflow:auto;border:2px inset #8a8470;background:#efece0;max-height:calc(100vh - 260px)' }, cv)));
 }

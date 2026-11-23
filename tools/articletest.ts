@@ -1,0 +1,12 @@
+import { createGame, addCompany, applyAction, processTurn, DEFAULT_SETTINGS } from '../shared/engine.js';
+import { ARTICLE_FEE } from '../shared/data.js';
+import { buildView } from '../server/view.js';
+const s = createGame({ ...DEFAULT_SETTINGS, seed: 3, aiCompanies: 1, targetNetWorth: 0 } as any); const a = addCompany(s, { name: 'A', playerId: 'a' }), b = addCompany(s, { name: 'B', playerId: 'b' });
+const rec: any = { id: 'g', state: s, players: [], gameSalt: '', gameHash: null, nextTurnAt: 0, paused: false, createdAt: 0 };
+const cash0 = a.cash;
+console.log('short', JSON.stringify(applyAction(s, a.id, { type: 'publishArticle', text: 'hi' } as any)));
+console.log('ok', JSON.stringify(applyAction(s, a.id, { type: 'publishArticle', text: 'x'.repeat(900) } as any)), 'stored length', s.articles![0].text.length);
+console.log('twice', JSON.stringify(applyAction(s, a.id, { type: 'publishArticle', text: 'Another notice, please' } as any)));
+console.log('B sees it before printing?', buildView(rec, b.id).articles.length, '| A sees own pending:', buildView(rec, a.id).articles.length);
+processTurn(s);
+console.log('B sees it next turn:', buildView(rec, b.id).articles.length, 'turn', s.turn, '| A cash change', Math.round(a.cash - cash0), '| ads in ledger', a.ledger.ads, 'expected fee', ARTICLE_FEE);

@@ -12,10 +12,10 @@ const rows: Row[] = [];
 
 const variants = [[3, 7], [14, 2], [25, 31], [8, 19], [40, 11], [5, 5]];
 const terrainRows: [string, string, string][] = [
-  ['d', 'Deep sea', ''], ['a', 'Shallow sea', ''], ['b', 'Beach', ''], ['g', 'Grassland', ''], ['f', 'Farmland', ''], ['t', 'Forest', ''],
-  ['h', 'Hills', 'scenery, not buildable'], ['m', 'Mountain', 'scenery, not buildable'], ['n', 'Snow peaks', 'scenery, not buildable'],
-  ['o', 'Oil field', 'resource: oil well'], ['e', 'Ore deposit', 'resource: iron mine'],
-  ['u', 'Downtown', 'city core'], ['s', 'Suburb', 'city outskirts'], ['p', 'Port / harbour', 'pier + boat'],
+  ['d', 'Deep sea', ''], ['a', 'Shallow sea', ''], ['g', 'Grassland', ''], ['f', 'Farmland', ''], ['t', 'Forest', ''],
+  ['m', 'Mountain', 'quarry site'],
+  ['o', 'Oil field', 'resource: oil well'], ['e', 'Iron deposit', 'resource: iron mine'], ['c', 'Copper deposit', 'resource: copper mine'], ['x', 'Rare ore deposit', 'resource: rare ore mine'],
+  ['u', 'Downtown', 'city core'], ['l', 'Luxury downtown', 'rich, clean, built-up core'], ['s', 'Suburb', 'city outskirts'], ['w', 'Town', 'small settlement beside a road'], ['i', 'Railroad', 'track on grey pavement'], ['h', 'Town hall', 'central square'], ['p', 'Port / harbour', 'pier + boat'],
 ];
 for (const [ch, name, note] of terrainRows) {
   rows.push({ title: name + '  [' + ch + ']', note: note || 'variants vary by tile position', items: variants.map(([vx, vy]) => (g, px, py) => drawTile(g, ch, vx, vy, px, py, Z, () => 'g')) });

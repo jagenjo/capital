@@ -18,8 +18,18 @@ function loginScreen() {
 
 const field = (label: string, input: HTMLElement, hint = '') => [h('label', { class: 'muted' }, label), h('div', null, input, hint && h('span', { class: 'note', style: 'margin-left:8px' }, hint))];
 
+const KIND: Record<string, string> = { idea: '💡 Idea', balance: '⚖ Balance', bug: '🐞 Broken', other: 'Other' };
+function suggestionsPanel(list: Awaited<ReturnType<typeof api.suggestions>>): HTMLElement {
+  return h('div', { class: 'panel col' }, h('h2', null, `Ideas & suggestions (${list.length})`),
+    list.length === 0 ? h('div', { class: 'muted' }, 'Nothing yet. Players send these from Settings.') : list.map(x => h('div', { class: 'card' },
+      h('div', { class: 'row' }, h('b', null, KIND[x.kind] ?? x.kind), h('span', { class: 'muted small' }, `${x.player}${x.company ? ' (' + x.company + ')' : ''} · ${x.game} · ${new Date(x.at).toLocaleString()}`), h('span', { class: 'grow' }),
+        h('button', { class: 'mini', onclick: async () => { await api.delSuggestion(x.id); panel(); } }, 'Done')),
+      h('div', { style: 'white-space:pre-wrap' }, x.text))));
+}
 async function panel() {
   let games: any[] = [];
+  let sugg: Awaited<ReturnType<typeof api.suggestions>> = [];
+  try { sugg = await api.suggestions(); } catch { /* older server */ }
   try { games = await api.list(); } catch (e: any) { token = ''; sessionStorage.removeItem('capital.admin'); toast(e.message, 'err'); return loginScreen(); }
 
   const f = {
@@ -36,6 +46,7 @@ async function panel() {
     turnIntervalHours: h('input', { type: 'number', value: 24, step: 1 }),
     advanceWhenReady: h('input', { type: 'checkbox', checked: true }),
     events: h('input', { type: 'checkbox', checked: true }),
+    starter: h('input', { type: 'checkbox', checked: true }),
     seed: h('input', { type: 'number', placeholder: 'random' }),
   };
   const create = async () => {
@@ -53,7 +64,7 @@ async function panel() {
       ...field('Cities', f.cityCount), ...field('Max players', f.maxPlayers),
       ...field('Auto-turn every (hours)', f.turnIntervalHours, '24 = one month per day'),
       ...field('Play turn when all ready', f.advanceWhenReady, 'otherwise wait for the timer'),
-      ...field('Random events', f.events), ...field('Map seed', f.seed)),
+      ...field('Random events', f.events), ...field('Starter business', f.starter, 'new companies begin with a working farm, bakery and shop'), ...field('Map seed', f.seed)),
     h('div', { style: 'margin-top:12px' }, h('button', { class: 'primary', onclick: create }, 'Create game')));
 
   const gameCard = (g: any) => {
@@ -84,7 +95,7 @@ async function panel() {
   app.replaceChildren(h('div', { class: 'content col' },
     h('div', { class: 'row' }, h('img', { src: asset('title/gameset.jpg'), style: 'height:60px;border:1px solid #bbb' }), h('h1', { style: 'margin:0' }, 'Capital — admin panel'), h('span', { class: 'grow' }),
       h('a', { href: '/' }, '← Game'), langButton(panel), h('button', { onclick: () => { token = ''; sessionStorage.removeItem('capital.admin'); loginScreen(); } }, 'Log out')),
-    createPanel, h('h2', null, `Games (${games.length})`), ...games.map(gameCard), games.length === 0 && h('div', { class: 'muted' }, 'No games yet.')));
+    createPanel, h('h2', null, `Games (${games.length})`), ...games.map(gameCard), suggestionsPanel(sugg), games.length === 0 && h('div', { class: 'muted' }, 'No games yet.')));
 }
 
 token ? panel() : loginScreen();

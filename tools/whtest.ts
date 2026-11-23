@@ -4,6 +4,7 @@ const c = addCompany(s, { name: 'Tester', playerId: 't' });
 const port = s.cities.find(x => x.port)!;
 port.harbour = ['steel', 'plastics', 'electronics', 'grain'].map(p => ({ product: p as any, qty: 100000, mult: 1, since: 0 }));
 const g = [...s.world!.tiles].map((ch, i) => ch === 'g' ? i : -1).filter(i => i >= 0)[100];
+(c.research ??= {}).cars = 999; // cars are hi-tech now: unlock them for this test
 const b = s.buildings[(applyAction(s, c.id, { type: 'build', idx: g, btype: 'factory', product: 'cars' }) as any).info];
 const A = (a: any) => { const x = applyAction(s, c.id, a) as any; if (x.error) console.log('ERR', JSON.stringify(a).slice(0, 90), x.error); return x; };
 const H = harbourId(port.id);

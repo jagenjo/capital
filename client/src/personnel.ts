@@ -1,4 +1,5 @@
 // Personnel: hire managers (one facility each, max 2) and an advisor (insights).
+import { personImg } from './prodimg.js';
 import { MAX_STAFF, ADVISOR_SPECS, OFFER_WINDOW } from '../../shared/engine.js';
 import { BUILDINGS } from '../../shared/data.js';
 import type { Person } from '../../shared/types.js';
@@ -17,7 +18,7 @@ function card(p: Cand, hired: boolean, rival = false): HTMLElement {
   const assign = hired && p.kind === 'manager' ? h('select', { onchange: (e: Event) => act({ type: 'assign', id: p.id, building: (e.target as HTMLSelectElement).value || null }) },
     h('option', { value: '' }, '— unassigned —'), v.buildings.map(b => h('option', { value: b.id, selected: p.assigned === b.id }, b.name + ' (' + b.type + ')'))) : null;
   return h('div', { class: 'pcard' },
-    h('img', { src: asset(`person/${String(p.portrait).padStart(2, '0')}.png`) }),
+    personImg(p.portrait, 60),
     h('div', { class: 'grow' }, h('b', null, p.name), h('span', { class: 'muted' }, ` · ${p.age} · ${p.kind === 'manager' ? 'Manager' : 'Advisor'}: ${specName(p)}`), stats,
       assign, h('div', { class: 'note' }, (hired ? 'Salary ' : 'Asking ') + money(p.salary) + ' / month' + (!hired && !rival ? ` · ${p.bidders ?? 0} bid${p.bidders === 1 ? '' : 's'} · ${p.term ?? 12}-month contract` : '')), hired || rival ? contractLine(p) : null),
     hired ? h('div', { class: 'col', style: 'gap:4px;align-items:flex-end' }, h('button', { onclick: () => { if (confirm(`Fire ${p.name}? One month of salary is paid as severance.`)) act({ type: 'fire', id: p.id }); } }, 'Fire'), left(p) <= OFFER_WINDOW ? bidBox(p, 'Renew') : null)
@@ -35,10 +36,17 @@ function bidBox(p: Cand, label = 'Bid'): HTMLElement {
     h('div', { class: 'row', style: 'gap:3px;flex-wrap:nowrap' }, inp, h('button', { class: 'primary', onclick: () => act({ type: 'bid', id: p.id, salary: +inp.value }) }, p.myBid ? 'Update ' + label.toLowerCase() : label)),
     p.myBid ? h('div', { class: 'row', style: 'gap:6px' }, h('span', { class: 'good small' }, 'Your bid ' + money(p.myBid)), h('button', { class: 'mini', onclick: () => act({ type: 'withdrawBid', id: p.id }) }, 'Withdraw')) : null);
 }
+/** Candidate tabs: every manager, or advisors by their field. */
+const ROLES: [string, string][] = [['all', 'All'], ['manager', 'Managers'], ...Object.entries(ADVISOR_SPECS)];
+let role = 'all';
+const fits = (p: { kind: string; spec: string }, r: string) => r === 'all' || (r === 'manager' ? p.kind === 'manager' : p.kind === 'advisor' && p.spec === r);
 export function personnelScreen(): HTMLElement {
   const v = S.view!; const staff = v.me.staff ?? [];
   const mgrs = staff.filter(p => p.kind === 'manager'), adv = staff.filter(p => p.kind === 'advisor');
   const pool = v.candidates;
+  // available people first, then the ones employed elsewhere (soonest free first)
+  const avail = pool.filter(p => fits(p, role)).sort((a, b) => a.kind.localeCompare(b.kind) || (b.kind === 'advisor' ? b.skill - a.skill : (b.eff + b.prod + b.exp) - (a.eff + a.prod + a.exp)));
+  const employed = v.competitors.filter(p => fits(p, role)).sort((a, b) => (a.contractEnd ?? 0) - (b.contractEnd ?? 0));
   const payroll = staff.reduce((n, p) => n + p.salary, 0);
   const tone = (t: string) => t === 'good' ? 'good' : t === 'bad' ? 'bad' : '';
   return h('div', { class: 'grid2' },
@@ -51,10 +59,13 @@ export function personnelScreen(): HTMLElement {
         adv.length > 0 && (v.advice.length ? v.advice.map(a => h('div', { class: tone(a.tone) + (a.building ? ' clickable' : ''), style: 'padding:2px 0', onclick: a.building ? () => { S.tab = 'buildings'; S.buildingId = a.building!; S.render(); } : undefined }, '• ' + a.text)) : h('div', { class: 'muted' }, 'Nothing to report.'))),
       h('div', { class: 'note' }, 'Monthly payroll: ' + money(payroll) + '. Firing costs one month of salary. ')),
     h('div', { class: 'col' },
-      h('div', { class: 'panel col' }, h('h2', null, 'Competitors\' personnel (' + v.competitors.length + ')'),
-        h('div', { class: 'note' }, `Managers and advisors employed by other companies. ${OFFER_WINDOW} months before a contract ends you can make a sealed offer: if it beats the employer's salary (and their own counter-offer) when the contract runs out, the person joins you.`),
-        v.competitors.length ? v.competitors.map(p => h('div', null, h('div', { class: 'small', style: 'margin:4px 0 1px' }, h('span', { class: 'tag', style: 'background:' + (companyOf(p.company)?.color ?? '#888') }), ' ' + (companyOf(p.company)?.name ?? '?')), card(p, false, true))) : h('div', { class: 'muted' }, 'Other companies have no staff yet.')),
-      h('div', { class: 'panel col' }, h('h2', null, 'Candidates'), h('div', { class: 'note' }, 'A new short list appears every round and unhired people leave. Bids are sealed: when the turn ends the highest monthly salary offer wins each candidate (the winner pays the salary they bid). You can bid on several; you keep at least 2 months of the salary in cash.'),
-        h('h3', null, 'Managers'), pool.filter(p => p.kind === 'manager').map(p => card(p, false)),
-        h('h3', null, 'Advisors'), pool.filter(p => p.kind === 'advisor').map(p => card(p, false)))));
+      h('div', { class: 'panel col' }, h('h2', null, 'Candidates'),
+        h('div', { class: 'row', style: 'gap:4px;flex-wrap:wrap' }, ROLES.map(([k, label]) => { const n = pool.filter(p => fits(p, k)).length + v.competitors.filter(p => fits(p, k)).length;
+          return h('button', { class: 'mini' + (role === k ? ' primary' : ''), onclick: () => { role = k; S.render(); } }, label + ' (' + n + ')'); })),
+        h('h3', null, 'Available'),
+        h('div', { class: 'note' }, 'A new short list appears every round and unhired people leave. Bids are sealed: when the turn ends the highest monthly salary offer wins each candidate (the winner pays the salary they bid). You can bid on several; you keep at least 2 months of the salary in cash.'),
+        avail.length ? avail.map(p => card(p, false)) : h('div', { class: 'muted' }, 'Nobody available for this role this round.'),
+        h('h3', null, 'Working for other companies'),
+        h('div', { class: 'note' }, `${OFFER_WINDOW} months before their contract ends you can make a sealed offer: if it beats the employer's salary (and their own counter-offer) when the contract runs out, the person joins you.`),
+        employed.length ? employed.map(p => h('div', null, h('div', { class: 'small', style: 'margin:4px 0 1px' }, h('span', { class: 'tag', style: 'background:' + (companyOf(p.company)?.color ?? '#888') }), ' ' + (companyOf(p.company)?.name ?? '?')), card(p, false, true))) : h('div', { class: 'muted' }, 'Nobody in this role works for another company.'))));
 }

@@ -3,21 +3,23 @@ import { PRODUCTS } from '../../shared/data.js';
 import { h, money, cls, crisp } from './util.js';
 import { S } from './state.js';
 
-type Slice = { label: string; value: number };
+type Slice = { label: string; value: number; color?: string };
 const COLORS = ['#4a7fc0', '#c0504d', '#9cba4a', '#d98c00', '#8a5fb5', '#3f8f4f', '#2c8f9c', '#b0508c', '#8d7b6a', '#e0c040', '#5b6770'];
 const mode = { exp: 'category', inc: 'product' };
 
-function pie(slices: Slice[]): HTMLElement {
+const col = (s: Slice, i: number) => s.color ?? COLORS[i % COLORS.length], isWhite = (s: Slice) => /^#f{3}(f{3})?$/i.test(s.color ?? '');
+/** Pie chart with a legend. A slice may bring its own colour (e.g. a company's); white slices get an outline. */
+export function pie(slices: Slice[], fmt: (n: number) => string = money, size = 240): HTMLElement {
   const data = slices.filter(s => s.value > 0.5).sort((a, b) => b.value - a.value);
   const total = data.reduce((n, s) => n + s.value, 0);
-  const top = data.slice(0, 10), rest = data.slice(10).reduce((n, s) => n + s.value, 0); if (rest > 0) top.push({ label: 'Other', value: rest });
+  const top = data.slice(0, 10), rest = data.slice(10).reduce((n, s) => n + s.value, 0); if (rest > 0) top.push({ label: 'Other', value: rest, color: top.some(x => x.color) ? '#bbb' : undefined });
   const wrap = h('div', { class: 'pie' });
   if (!total) { wrap.append(h('div', { class: 'muted' }, 'Nothing to show yet: play a turn.')); return wrap; }
-  const cv = crisp(h('canvas'), 240, 240); const g = cv.getContext('2d')!;
+  const cv = crisp(h('canvas'), size, size); const g = cv.getContext('2d')!;
   let a = -Math.PI / 2;
-  top.forEach((s, i) => { const da = s.value / total * Math.PI * 2; g.beginPath(); g.moveTo(120, 120); g.arc(120, 120, 112, a, a + da); g.closePath(); g.fillStyle = COLORS[i % COLORS.length]; g.fill(); g.strokeStyle = '#f4f1e6'; g.lineWidth = 2; g.stroke(); a += da; });
-  const legend = h('table', { class: 'pielegend' }, top.map((s, i) => h('tr', null, h('td', null, h('span', { class: 'tag', style: 'background:' + COLORS[i % COLORS.length] })), h('td', null, s.label), h('td', { class: 'num' }, money(s.value)), h('td', { class: 'num muted' }, (s.value / total * 100).toFixed(1) + '%'))),
-    h('tr', null, h('td'), h('td', null, h('b', null, 'Total')), h('td', { class: 'num' }, h('b', null, money(total))), h('td')));
+  top.forEach((s, i) => { const da = s.value / total * Math.PI * 2; g.beginPath(); g.moveTo(size / 2, size / 2); g.arc(size / 2, size / 2, size / 2 - 8, a, a + da); g.closePath(); g.fillStyle = col(s, i); g.fill(); g.strokeStyle = isWhite(s) ? '#999' : '#f4f1e6'; g.lineWidth = isWhite(s) ? 1 : 2; g.stroke(); a += da; });
+  const legend = h('table', { class: 'pielegend' }, top.map((s, i) => h('tr', null, h('td', null, h('span', { class: 'tag', style: 'background:' + col(s, i) + (isWhite(s) ? ';box-shadow:inset 0 0 0 1px #999' : '') })), h('td', null, s.label), h('td', { class: 'num' }, fmt(s.value)), h('td', { class: 'num muted' }, (s.value / total * 100).toFixed(1) + '%'))),
+    h('tr', null, h('td'), h('td', null, h('b', null, 'Total')), h('td', { class: 'num' }, h('b', null, fmt(total))), h('td')));
   wrap.append(cv, legend); return wrap;
 }
 const picker = (key: 'exp' | 'inc', opts: [string, string][]) => h('div', { class: 'row', style: 'gap:4px;margin-bottom:6px' }, opts.map(([k, label]) => h('button', { class: 'mini' + (mode[key] === k ? ' primary' : ''), onclick: () => { mode[key] = k; S.render(); } }, label)));

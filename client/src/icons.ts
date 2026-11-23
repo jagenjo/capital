@@ -1,5 +1,6 @@
 // Small stroke icons (16x16, currentColor) used in the navigation, top bar and settings.
 const P: Record<string, string> = {
+  desk: '<rect x="2" y="3" width="12" height="8.5" rx="1"/><path d="M5 14h6M8 11.5V14M5 6.5h6M5 8.5h3.5"/>',
   map: '<path d="M1.5 3.5l4-1.5 5 1.5 4-1.5v10l-4 1.5-5-1.5-4 1.5z"/><path d="M5.5 2v10.5M10.5 3.5V14"/>',
   buildings: '<rect x="2.5" y="5" width="6" height="9"/><rect x="8.5" y="2" width="5" height="12"/><path d="M4.5 8h2M4.5 11h2M10.5 5h1M10.5 8h1M10.5 11h1"/>',
   chain: '<circle cx="3.5" cy="8" r="2"/><circle cx="12.5" cy="3.5" r="2"/><circle cx="12.5" cy="12.5" r="2"/><path d="M5.3 7l5.4-2.5M5.3 9l5.4 2.5"/>',
@@ -24,6 +25,8 @@ const P: Record<string, string> = {
   globe: '<circle cx="8" cy="8" r="6.5"/><ellipse cx="8" cy="8" rx="3" ry="6.5"/><path d="M1.5 8h13"/>',
   ready: '<path d="M3 8.5l3.2 3.2L13 4.8"/>',
   next: '<path d="M4 3l8 5-8 5z"/>',
+  heat: '<path d="M2 13.5h12M3.5 13.5V9M6.5 13.5V5.5M9.5 13.5V8M12.5 13.5V3.5"/>',
+  route: '<circle cx="3.5" cy="12.5" r="1.6"/><circle cx="12.5" cy="3.5" r="1.6"/><path d="M5 12.5h4.5a2 2 0 002-2v-1a2 2 0 00-2-2H6.5a2 2 0 01-2-2v-.5" stroke-dasharray="2 1.6"/>',
   leave: '<path d="M6.5 2.5h-4v11h4M6 8h8M11.5 5.5L14 8l-2.5 2.5"/>',
 };
 export function icon(name: string): HTMLElement {
