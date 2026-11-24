@@ -50,5 +50,7 @@ function settingsPanel(): HTMLElement {
     h('h3', null, icon('finance'), 'Currency'),
     choice<Cur>(cur, [['USD', 'US dollar ($)'], ['EUR', 'Euro (€)']], setCur),
     h('div', { class: 'note' }, `Display only: the game always calculates in dollars. Euro amounts are shown at a fixed rate of 1 USD = ${RATE} EUR. Amounts you type into fields (loans, bids, prices) are still entered in dollars.`),
-    h('div', { class: 'note' }, 'These settings are stored in this browser.'));
+    h('div', { class: 'note' }, 'These settings are stored in this browser.'),
+    h('h3', null, icon('encyclopedia'), 'Tutorial'),
+    h('div', { class: 'row' }, h('a', { href: '/tutorial/', target: '_blank', rel: 'noopener' }, h('button', { class: 'primary' }, 'Open the tutorial website'))));
 }

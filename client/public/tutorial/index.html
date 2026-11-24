@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Capital — Tutorial</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { --bg:#a39d85; --panel:#d8d2ba; --ink:#1b1b18; --muted:#6b6a5e; --blue:#3f66a8; --line:#8b856c; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.55 system-ui, "Segoe UI", Arial, sans-serif; }
+  header { background:linear-gradient(#2c3f66,#1f2d4a); color:#fff; padding:28px 20px; text-align:center; }
+  header h1 { margin:0 0 4px; font-size:34px; letter-spacing:2px; }
+  header p { margin:0; opacity:.85; }
+  .wrap { max-width:1100px; margin:0 auto; padding:0 16px 60px; display:grid; grid-template-columns:230px 1fr; gap:24px; }
+  nav { position:sticky; top:12px; align-self:start; background:var(--panel); border:2px solid var(--line); padding:12px 14px; margin-top:20px; font-size:14px; max-height:calc(100vh - 24px); overflow:auto; }
+  nav b { display:block; margin:8px 0 3px; color:var(--muted); text-transform:uppercase; font-size:11px; letter-spacing:.08em; }
+  nav a { display:block; color:var(--ink); text-decoration:none; padding:2px 0; }
+  nav a:hover { color:var(--blue); text-decoration:underline; }
+  main { margin-top:20px; }
+  section { background:var(--panel); border:2px solid var(--line); padding:6px 22px 18px; margin-bottom:18px; }
+  h2 { margin:16px 0 6px; font-size:24px; border-bottom:2px solid var(--line); padding-bottom:4px; }
+  h3 { margin:20px 0 4px; font-size:18px; }
+  figure { margin:12px 0; }
+  figure img { max-width:100%; border:2px solid #444; display:block; background:#fff; cursor:zoom-in; }
+  figcaption { font-size:13px; color:var(--muted); margin-top:4px; }
+  .tip, .warn { padding:8px 12px; margin:12px 0; border-left:5px solid var(--blue); background:#ecebdc; font-size:15px; }
+  .warn { border-color:#b24; }
+  kbd, code { background:#ecebdc; border:1px solid var(--line); padding:0 5px; font-size:.92em; }
+  table { border-collapse:collapse; width:100%; font-size:14.5px; }
+  td, th { border:1px solid var(--line); padding:4px 8px; text-align:left; vertical-align:top; }
+  th { background:#cbc5ab; }
+  a { color:var(--blue); }
+  .play { display:inline-block; margin-top:12px; background:#fff; color:#1f2d4a; padding:8px 18px; text-decoration:none; font-weight:bold; border:2px solid #fff; }
+  #zoom { position:fixed; inset:0; background:rgba(0,0,0,.85); display:none; align-items:center; justify-content:center; z-index:9; cursor:zoom-out; }
+  #zoom img { max-width:96vw; max-height:96vh; border:2px solid #fff; }
+  @media (max-width:800px) { .wrap { grid-template-columns:1fr; } nav { position:static; max-height:none; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>CAPITAL — TUTORIAL</h1>
+  <p>A turn-based multiplayer business game. One turn = one month. Everything you need to build your first company.</p>
+  <a class="play" href="/">▶ Back to the game</a>
+</header>
+<div class="wrap">
+<nav>
+  <b>Getting started</b>
+  <a href="#idea">The idea</a><a href="#join">Joining a game</a><a href="#screen">The screen</a><a href="#turn">Turns</a>
+  <b>The map</b>
+  <a href="#map">Reading the map</a><a href="#tile">Tiles and land</a><a href="#cities">Cities and growth</a>
+  <b>Buildings</b>
+  <a href="#farm">Farms and mines</a><a href="#factory">Factories</a><a href="#layout">Factory layouts</a><a href="#store">Retail stores</a><a href="#mybuildings">My buildings</a>
+  <b>Management</b>
+  <a href="#desk">Desk and contracts</a><a href="#chain">Supply chain</a><a href="#market">Market</a><a href="#personnel">Personnel</a><a href="#finance">Finance</a><a href="#analytics">Analytics</a><a href="#stocks">Stock market</a><a href="#realestate">Real estate</a><a href="#ads">Advertising</a><a href="#rivals">Competitors</a><a href="#news">News and encyclopedia</a><a href="#settings">Settings and console</a>
+  <b>Playing well</b>
+  <a href="#first">Your first 12 months</a><a href="#tips">Tips</a><a href="#faq">FAQ</a>
+</nav>
+<main>
+
+<section id="idea">
+  <h2>The idea</h2>
+  <p>You run a company in a procedural world of cities, farmland, forests, mines and ports. You buy land, build farms, mines, factories and shops, hire workers, set prices, sign contracts and compete with AI companies and other players. The game is inspired by <i>Capitalism</i> (1995) and is full of micromanagement: almost every number you see can be changed.</p>
+  <p>The game is <b>turn based</b>. You plan everything you want to do in a month, then press <b>End turn</b>. The server simulates the month: production, shipping, sales, wages, taxes, growth of cities. A server also plays one turn automatically every day (configurable by the admin), and can advance sooner when all players are ready.</p>
+  <p><b>Win</b> by reaching the net-worth goal first, or by being the richest when the game's length ends. Three months in a row of negative net worth means bankruptcy.</p>
+</section>
+
+<section id="join">
+  <h2>Joining a game</h2>
+  <p>Open the home page. Enter your <b>name</b> and a personal <b>password</b> (3+ characters), a company name, a CEO portrait and a company colour, then press <b>Join / log in</b> on a game. The same name and password log you back in from any browser. If a game has a lock icon, type its game password too.</p>
+  <figure><img src="img/login.png" alt="Home screen"><figcaption>The home screen: your player, the list of games, and the <b>Tutorial website</b> button that opens this page.</figcaption></figure>
+  <p>To create a game, use the <a href="/admin.html">admin panel</a> (default password <code>admin</code>). You can set the starting cash, the number of AI companies, game length, net-worth goal, turn interval and the <b>Starter business</b> option (a ready-made farm, factory and shop so you can watch the economy run from turn one).</p>
+</section>
+
+<section id="screen">
+  <h2>The screen</h2>
+  <figure><img src="img/map.png" alt="Main screen"><figcaption>Top bar, tab strip, and the four panels of the Map tab.</figcaption></figure>
+  <ul>
+    <li><b>Top bar</b>: your company, date and turn, cash, net worth, debt, time to the next automatic turn, and how many players are ready. <b>End turn</b> marks you ready; <b>Leave</b> returns to the home screen (your company stays).</li>
+    <li><b>Tab strip</b>: Map, Desk, My buildings, Supply chain, Market, Personnel, Finance, Analytics, Stock market, Real estate, Advertising, Competitors, News, Encyclopedia, Settings. Use the arrows at the ends when the window is narrow.</li>
+    <li><b>Map tab</b> has four panels: the world minimap (top left), the zoom view (top right), tile or company information (bottom left) and the actions for the selected tile or building (bottom right). Drag the grip in the centre to resize the panels; double-click it to reset.</li>
+  </ul>
+  <div class="tip">The game remembers the tile you last clicked and the map position, so you continue where you left off.</div>
+</section>
+
+<section id="turn">
+  <h2>How a turn works</h2>
+  <ol>
+    <li><b>Plan</b>: buy land, order buildings, set prices, orders and suppliers, hire people, answer your Desk.</li>
+    <li><b>End turn</b>: you are marked as ready. When everybody is ready (or the daily timer fires) the month is simulated. Press again to unready.</li>
+    <li><b>Simulation</b>: farms and mines produce; factories turn inputs into products; goods move between buildings; shops sell to the people in their area; wages, rent, maintenance, interest and taxes are paid; cities grow or shrink; events happen.</li>
+    <li><b>Review</b>: a turn summary pops up, the News tab lists what happened, and each building has a report.</li>
+  </ol>
+  <p>Construction takes time: most buildings finish after 1 month, mines, quarries and oil wells take 2, and malls take 3. A building that is still under construction shows "opens in N mo".</p>
+</section>
+
+<section id="map">
+  <h2>Reading the map</h2>
+  <p>The world is a 400×240 tile map: seas, beaches, farmland, forests, hills, mountains, ore deposits, oil fields and snow peaks. Cities are groups of <b>downtown</b>, <b>suburb</b> and <b>town</b> tiles, ports sit on the coast, and roads and railways connect the cities.</p>
+  <ul>
+    <li><b>Minimap</b>: click or drag to move the zoom view. The yellow box shows what the zoom view displays.</li>
+    <li><b>Zoom view</b>: click a tile to select it. Use the buttons for zoom in/out, centre on your buildings, and the whole world. The drop-down chooses the overlay (Terrain, population, pollution, transport, fertility…) and <b>Show</b> toggles labels and markers.</li>
+    <li>Small coloured badges are buildings: yours have your colour, rivals show theirs. A red line shows the transport route when a building is selected.</li>
+  </ul>
+</section>
+
+<section id="tile">
+  <h2>Tiles and land</h2>
+  <p>Every tile is a lot you can buy and build on. Click one to see its stats on the left and what you can build on the right.</p>
+  <figure><img src="img/tile.png" alt="Empty farmland tile"><figcaption>An empty farmland tile: land price, then each building you could place here with its cost and an <b>Order</b> button.</figcaption></figure>
+  <table>
+    <tr><th>Stat</th><th>Meaning</th></tr>
+    <tr><td>Fertility</td><td>How good the soil is. Farms harvest more on fertile land.</td></tr>
+    <tr><td>Population here</td><td>People living in this tile (cities only). Drives land price and customers.</td></tr>
+    <tr><td>Transport availability / cost</td><td>How well road and rail serve the tile, and what it costs to move goods to the nearest city.</td></tr>
+    <tr><td>Pollution</td><td>Factories pollute. Forests absorb up to 70% of it nearby.</td></tr>
+    <tr><td>Price to build here</td><td>Land plus construction. In cities land is priced by <b>population</b>: twice the people, twice the price.</td></tr>
+  </table>
+  <h3>Ordering a building</h3>
+  <p>Press <b>Order</b>. The cost box under the button shows <b>Land</b>, <b>Installation</b> (construction), <b>Taxes</b> (4% on both) and the <b>Total</b>. Several companies can order the same lot in the same turn: type a <b>Sealed bid +$</b> and the highest bid wins when the turn is played.</p>
+  <figure><img src="img/downtown.png" alt="Building options in a suburb"><figcaption>A suburb tile in Marlowe: factory (layout size 2×2 or 3×3), supermarket, retail store and more. Services and nearby inhabitants change how a building performs.</figcaption></figure>
+  <ul>
+    <li><b>Farm / logging / mines / oil / quarry</b> must sit on the right terrain (farmland, forest, ore deposit, oil field, mountain).</li>
+    <li><b>Factories</b> can go on open land, forest and in cities. In the city a downtown factory is always 2×2 cells; suburbs and towns offer 2×2 or 3×3; open land 2×2 to 4×4.</li>
+    <li><b>Stores</b> need people: they sell to the population within a few tiles. Supermarkets and malls reach farther.</li>
+    <li><b>R&amp;D labs</b> research new technology. <b>Malls</b> host tenants.</li>
+  </ul>
+</section>
+
+<section id="cities">
+  <h2>Cities and growth</h2>
+  <p>Each tile with people has needs: bread, dairy, meat, clothing and other everyday goods. Cities <b>grow</b> when shops actually sell those goods to a tile; they shrink when needs go unmet. A growing suburb spreads into open land around it, and becomes downtown when none is left. Production nearby raises the chance of growth.</p>
+  <p>The <b>Growth</b> box in the tile panel lists what the tile needs and how much of it is being sold, so you can see why a place is not growing.</p>
+  <figure><img src="img/cityhall.png" alt="City hall"><figcaption>The city hall: city statistics, wages and subsidies. The first company of a kind in a city can get a land discount or a tax break.</figcaption></figure>
+  <p>The workforce is a <b>pool per city</b>. Wages rise when companies compete for workers. A building belongs to its nearest city (labour, wages and customers).</p>
+</section>
+
+<section id="farm">
+  <h2>Farms, mines and other raw producers</h2>
+  <p>Select your building (click it on the map or in <b>My buildings</b>). A card with tabs appears at the lower right.</p>
+  <figure><img src="img/farm.png" alt="Farm production tab"><figcaption>A farm. <b>Production</b> sets the product, the number of lines, automation and sales.</figcaption></figure>
+  <ul>
+    <li><b>Product</b>: grain, corn, cotton, vegetables, fruits, sugar or livestock for farms (depending on fertility).</li>
+    <li><b>Lines</b>: each adds capacity, at a cost. <b>Automation</b> (robots) cuts labour for extra cost.</li>
+    <li><b>Sales</b>: <b>Sell to everyone</b> puts your stock on the open market at your price; <b>Sell to world market</b> exports at world prices; you can also sell directly to your own factories and stores or by contract.</li>
+    <li>Farms burn some fuel to run. It is bought from the market automatically if you do not supply it.</li>
+  </ul>
+  <figure><img src="img/farm-supplies.png" alt="Supplies tab"><figcaption><b>Supplies</b>: the operating supplies (fuel) and where they come from.</figcaption></figure>
+  <figure><img src="img/farm-area.png" alt="Area tab"><figcaption><b>Area</b>: a farm covers a 7×7 area; buy the surrounding farmland tiles as expansions for +20% harvest per tile.</figcaption></figure>
+  <figure><img src="img/farm-staff.png" alt="Staff tab"><figcaption><b>Staff</b>: workers and wage. Workers are shown as icons; assign a manager from Personnel to raise efficiency.</figcaption></figure>
+  <figure><img src="img/farm-report.png" alt="Report tab"><figcaption><b>Report</b>: last month's production, sales, costs and result, with charts over time.</figcaption></figure>
+</section>
+
+<section id="factory">
+  <h2>Factories</h2>
+  <p>A factory turns inputs into a product. Its recipe comes from the product (for example <i>bread</i> needs grain; <i>beverages</i> need fruit and sugar; <i>canned food</i> needs vegetables). Check the <a href="#market">Market</a> and Encyclopedia tabs for recipes.</p>
+  <figure><img src="img/factory.png" alt="Factory production tab"><figcaption>A factory's <b>Production</b> tab: product card, inputs and where they come from, capacity, and sales.</figcaption></figure>
+  <ul>
+    <li><b>Inputs</b>: for every input choose a source: a harbour import, one of your own farms or mines, or a company that sells to everyone. Nothing is bought without an explicit source.</li>
+    <li><b>Maintenance %</b> keeps the condition up. A low condition lowers output.</li>
+    <li><b>Staff</b> are required per line, robot and other module. Understaffed factories produce less.</li>
+  </ul>
+  <div class="warn">A factory sells <b>only through its export cells</b> (see below). Without an export cell, goods pile up unsold.</div>
+</section>
+
+<section id="layout">
+  <h2>Factory layouts</h2>
+  <p>The <b>Layout</b> tab is a small grid of cells. Click a cell to see its info or to build a module in it. Modules are:</p>
+  <table>
+    <tr><th>Module</th><th>Role</th></tr>
+    <tr><td>Production line</td><td>Makes one product from the products that arrows bring in. Its output limit and quality effort (50–150%) can be set.</td></tr>
+    <tr><td>Import cell</td><td>Buys one product from a chosen source and holds a small buffer.</td></tr>
+    <tr><td>Warehouse</td><td>Stores 10× more than other cells. It holds only what arrows bring it and can throw goods away.</td></tr>
+    <tr><td>Export cell</td><td>Where finished goods are put on sale. Set its price here. Goods leave the factory only through export cells.</td></tr>
+    <tr><td>Robot, QA, Branding, R&amp;D bench</td><td>Support modules: link them to a line with a plain connection to give automation, quality, brand or research.</td></tr>
+  </table>
+  <figure><img src="img/factory-layout.png" alt="Factory layout"><figcaption>The default layout: <b>Import (grain) → Production (bread) → Export (bread)</b>. Arrows show the direction goods flow.</figcaption></figure>
+  <h3>Arrows</h3>
+  <p>Click the bar between two neighbouring cells (or the diagonal in a corner) to cycle: arrow one way, arrow the other way, a plain link (support modules), or none. A line pulls inputs only from the cells that point at it. A line's output is split equally between the warehouses and export cells it points at. Lines can feed other lines, e.g. electronics made inside a car factory.</p>
+  <p>Cells show warning signs when something is wrong (no source, nothing to produce from, a full buffer). The tab also lists problems in text; fix them until it says "All lines are supplied".</p>
+  <figure><img src="img/factory-report.png" alt="Factory report"><figcaption>The factory <b>Report</b>: production, quality and unit costs per month.</figcaption></figure>
+</section>
+
+<section id="store">
+  <h2>Retail stores</h2>
+  <p>Stores sell goods to the people living around them. Shelves compete with an NPC retailer and other shops on price, quality, brand and location.</p>
+  <figure><img src="img/store.png" alt="Store"><figcaption>A retail store.</figcaption></figure>
+  <h3>Shelves</h3>
+  <figure><img src="img/store-shelves.png" alt="Shelves"><figcaption>Each shelf: choose a product, set the <b>Price</b>, the <b>Order/month</b>, and watch <b>Stock</b> and <b>Sold last month</b>. The ⇄ icon opens the list of suppliers.</figcaption></figure>
+  <ul>
+    <li><b>Price</b> shows the difference to the market reference price. Cheaper sells more, dearer earns more per unit.</li>
+    <li><b>Order/month</b> is how many units the store buys from its supplier. If you order less than people want, it shows "unmet" demand.</li>
+    <li>A shelf with no source buys nothing: pick a supplier (your factory, another company, or a harbour import).</li>
+  </ul>
+  <h3>Shop</h3>
+  <figure><img src="img/store-shop.png" alt="Shop tab"><figcaption>The <b>Shop</b> tab: store <b>size</b> (more shelf space and customers) and <b>decoration</b>. Spending on decoration raises your <b>brand</b> and the store's <b>attraction</b>; it fades about 4% a month, so keep investing.</figcaption></figure>
+  <h3>Supplies, staff and report</h3>
+  <figure><img src="img/store-supplies.png" alt="Supplies tab"><figcaption><b>Supplies</b> lists suppliers and customers; the rest of the tabs behave like the farm tabs.</figcaption></figure>
+  <figure><img src="img/store-report.png" alt="Store report"><figcaption>The report splits units sold into the local market, other companies and the world.</figcaption></figure>
+</section>
+
+<section id="mybuildings">
+  <h2>My buildings</h2>
+  <figure><img src="img/tab-buildings.png" alt="My buildings"><figcaption>All your buildings, grouped: farms and mines first, then factories, then stores, then R&amp;D and the rest. Switch between the list and the cards. The red column lists issues such as "understaffed", "empty shelves" or "layout: supply problem".</figcaption></figure>
+  <p>Click a row to jump to the building on the map.</p>
+</section>
+
+<section id="desk">
+  <h2>Desk and contracts</h2>
+  <figure><img src="img/tab-desk.png" alt="Desk"><figcaption>The Desk lists the decisions waiting for you this month.</figcaption></figure>
+  <p>Customers, distributors, TV shows and others send you offers: <b>Sign</b>, <b>Decline</b>, or do nothing (each shows what happens by default). Contracts guarantee sales above market price but you must deliver every month; if you fail, the other party can take you to fault. The Desk also holds the <b>Forecast</b>, prepared by your advisor (hire one in Personnel).</p>
+</section>
+
+<section id="chain">
+  <h2>Supply chain</h2>
+  <figure><img src="img/tab-chain.png" alt="Supply chain"><figcaption>A diagram of your flows: fuel to the farm, grain to the bread line, bread to the shop.</figcaption></figure>
+  <p>Nodes are production lines, farms, mines, shops and harbours. A link means goods flow along it. Hover a node to highlight its links, click it to open the building. A green note says "Every input has a source"; otherwise it points at missing links.</p>
+</section>
+
+<section id="market">
+  <h2>Market</h2>
+  <figure><img src="img/tab-market.png" alt="Market"><figcaption>The local market: every product with its market index, reference price, import price, retail reference and demand.</figcaption></figure>
+  <p>Filter by Food, Resources, Manufacture or Technology. "Produced on the map" lists what somebody makes; "Not produced yet" shows opportunities. Click a product to open its card.</p>
+  <figure><img src="img/tab-market-detail.png" alt="Product card"><figcaption>A product card: recipe, producers, rival facilities, prices and your own suppliers and customers.</figcaption></figure>
+  <p>The right-hand pie shows units sold last month. The <b>World Market</b> tab shows prices and volumes of the export market, which drops as you sell more.</p>
+</section>
+
+<section id="personnel">
+  <h2>Personnel</h2>
+  <figure><img src="img/tab-personnel.png" alt="Personnel"><figcaption>Managers, advisors and candidates.</figcaption></figure>
+  <p>Candidates are hired by <b>sealed bids</b>: type a monthly salary and press <b>Bid</b>. When the turn is played the highest bid for each candidate wins and gets a contract of 12–24 months. <b>Managers</b> raise a building's efficiency, productivity and cut expenses. <b>Advisors</b> (market analyst, financial advisor, operations consultant, competitive intelligence) give you insights and the forecast.</p>
+</section>
+
+<section id="finance">
+  <h2>Finance</h2>
+  <figure><img src="img/tab-finance.png" alt="Finance"><figcaption>Balance, history chart, year-end policy, obligations and credit offers.</figcaption></figure>
+  <ul>
+    <li><b>Balance</b>: cash, debt, net worth and credit limit. Overdraft is allowed but charges interest.</li>
+    <li><b>Credit offers</b>: banks, credit unions, development funds and venture capital, each with its own rate, term and requirements (some need collateral). Open an offer, choose amount and term, and sign.</li>
+    <li><b>Fiscal year-end policy</b>: how much profit is paid as dividends or reinvested.</li>
+  </ul>
+</section>
+
+<section id="analytics">
+  <h2>Analytics</h2>
+  <figure><img src="img/tab-analytics.png" alt="Analytics"><figcaption>Income and expenses of last month, by category, building, product or city.</figcaption></figure>
+  <p>Use it to find what makes money and what loses it, and to see profit after tax.</p>
+</section>
+
+<section id="stocks">
+  <h2>Stock market</h2>
+  <figure><img src="img/tab-stocks.png" alt="Stock market"><figcaption>Companies listed with price, market cap and shares for sale.</figcaption></figure>
+  <p>Every company has 1,000,000 shares. You can buy or sell shares of others (with sealed bids), and issue your own shares to raise cash. Holding more than 50% lets you merge. Share prices follow net worth and recent profits.</p>
+</section>
+
+<section id="realestate">
+  <h2>Real estate</h2>
+  <figure><img src="img/tab-realestate.png" alt="Real estate"><figcaption>Ready-built facilities for sale, malls to rent into, and city incentives.</figcaption></figure>
+  <p>Used facilities are cheaper than building from scratch (typically 30–55% less) but come empty of staff and worn. Listings expire after 8 months. <b>City incentives</b> are one-off discounts and tax breaks for the first company of a kind in a city.</p>
+</section>
+
+<section id="ads">
+  <h2>Advertising</h2>
+  <figure><img src="img/tab-advertising.png" alt="Advertising"><figcaption>Campaigns by product and media contracts.</figcaption></figure>
+  <p>Brand awareness decays about 8% a month, so campaigns must be sustained. Set a budget per product, or sign a contract with a newspaper, radio or television outlet to push one product for a number of months (cancelling early costs 2 months of fee).</p>
+</section>
+
+<section id="rivals">
+  <h2>Competitors</h2>
+  <figure><img src="img/tab-competitors.png" alt="Competitors"><figcaption>The ranking, and a profile with each rival's buildings, products and prices.</figcaption></figure>
+  <p>You can send private messages, propose contracts, or buy their shares. AI companies fill the market, supply raw goods and open shops that grow cities.</p>
+</section>
+
+<section id="news">
+  <h2>News and Encyclopedia</h2>
+  <figure><img src="img/tab-news.png" alt="News"><figcaption>News: events (droughts, oil shocks, recessions), city growth and company moves.</figcaption></figure>
+  <figure><img src="img/tab-encyclopedia.png" alt="Encyclopedia"><figcaption>The Encyclopedia describes every product and facility, and what you need to research to unlock the technology goods.</figcaption></figure>
+</section>
+
+<section id="settings">
+  <h2>Settings and console</h2>
+  <figure><img src="img/tab-settings.png" alt="Settings"><figcaption>Language (English/Spanish), display currency (USD/EUR), the <b>Tutorial</b> button, a console and a box to send ideas to the admin.</figcaption></figure>
+  <p>The console accepts commands. Type <code>/help</code> for the list. Currency only changes how amounts are displayed; the game always calculates in dollars.</p>
+</section>
+
+<section id="first">
+  <h2>Your first 12 months</h2>
+  <ol>
+    <li>Look at the <b>Market</b>: pick a basic good with demand (bread, dairy, packaged meat).</li>
+    <li>Click a city and see its Growth box: unmet needs tell you what to supply.</li>
+    <li>Build a <b>farm</b> on farmland near a city (or use the starter business). Set its product and sell price.</li>
+    <li>Build a <b>factory</b>; in <b>Layout</b>, make sure the chain is Import → Production → Export. Set the import source to your farm and an export price.</li>
+    <li>Build a <b>retail store</b> downtown. Add the product to a shelf, choose your factory as the supplier, set price and order.</li>
+    <li>Hire staff, check the <b>Issues</b> column in My buildings, then press <b>End turn</b>.</li>
+    <li>Read last month's Report. Adjust price, order and quality effort. Repeat; reinvest the profits in a second shop or product.</li>
+  </ol>
+</section>
+
+<section id="tips">
+  <h2>Tips</h2>
+  <ul>
+    <li>Keep an eye on <b>cash</b>: construction, wages and loans can bankrupt you. Three negative net-worth months in a row end the game for you.</li>
+    <li>Price slightly below the reference price to win customers; raise it when stock runs low.</li>
+    <li>Never leave a shelf without a supplier, or a factory without an export cell.</li>
+    <li>Quality, brand and location matter as much as price. Decoration and advertising raise brand.</li>
+    <li>Forests lower pollution; put factories near them, but away from dense downtown if you want cheap land.</li>
+    <li>Rival AI prices are visible in the Competitors tab: undercut them when you can supply more cheaply.</li>
+  </ul>
+</section>
+
+<section id="faq">
+  <h2>FAQ</h2>
+  <p><b>My factory produces but earns nothing.</b> It has no export cell, or the export cell has no price. Open the Layout tab.</p>
+  <p><b>My store shows unmet demand.</b> The shelf order is smaller than what customers want. Raise Order/month, or the supplier does not have enough stock.</p>
+  <p><b>The city is not growing.</b> Select a tile: the Growth box shows which basic goods are not being sold there.</p>
+  <p><b>Can I play from another computer?</b> Yes: use the same name and password on the home page.</p>
+  <p><b>Where is the encyclopedia of products and tiles?</b> In the game's Encyclopedia tab; <a href="/tiles.html">tiles.html</a> shows every map tile.</p>
+  <p style="margin-top:20px"><a class="play" style="background:#1f2d4a;color:#fff;border-color:#1f2d4a" href="/">▶ Back to the game</a></p>
+</section>
+
+</main>
+</div>
+<div id="zoom"><img alt=""></div>
+<script>
+  const z = document.getElementById('zoom'), zi = z.querySelector('img');
+  document.querySelectorAll('figure img').forEach(i => i.addEventListener('click', () => { zi.src = i.src; z.style.display = 'flex'; }));
+  z.addEventListener('click', () => { z.style.display = 'none'; });
+</script>
+</body>
+</html>

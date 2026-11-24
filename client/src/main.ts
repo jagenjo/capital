@@ -52,7 +52,7 @@ async function lobby() {
   };
 
   app.replaceChildren(h('div', { class: 'login' },
-    h('div', { class: 'title' }, h('img', { src: asset('title/corp-1.jpg') }), h('div', null, h('h1', null, 'CAPITAL'), h('div', { class: 'muted' }, 'A turn-based multiplayer business game. One turn = one month.'), h('a', { href: '/admin.html' }, 'Admin panel → create a game'), h('div', { style: 'margin-top:6px' }, langButton(lobby)))),
+    h('div', { class: 'title' }, h('img', { src: asset('title/corp-1.jpg') }), h('div', null, h('h1', null, 'CAPITAL'), h('div', { class: 'muted' }, 'A turn-based multiplayer business game. One turn = one month.'), h('a', { href: '/admin.html' }, 'Admin panel → create a game'), h('div', { style: 'margin-top:6px' }, h('a', { href: '/tutorial/', target: '_blank', rel: 'noopener' }, h('button', { class: 'primary' }, '📖 Tutorial website')), ' ', langButton(lobby)))),
     h('div', { class: 'grid2' },
       h('div', { class: 'panel col' }, h('h2', null, 'Player'), name, pw, gpw, comp, h('h3', null, 'CEO portrait'), portraits, h('h3', null, 'Company colour'), colors,
         h('div', { class: 'note' }, 'Your name + password identify you in a game. Use them again to continue later from any browser.')),
